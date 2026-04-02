@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeviceStatus {
+  PENDING
+  ACTIVE
+  OFFLINE
+}
+
+enum NotificationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NotificationStatus {
+  PENDING
+  SHOWN
+  ACKNOWLEDGED
+  DISMISSED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  apiKeys       UserApiKey[]
+  devices       Device[]
+  notifications Notification[]
+}
+
+model UserApiKey {
+  id         String   @id @default(cuid())
+  label      String
+  keyHash    String   @unique
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Device {
+  id                 String              @id @default(cuid())
+  hardwareId         String              @unique
+  name               String
+  firmwareVersion    String
+  status             DeviceStatus        @default(PENDING)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  lastSeenAt         DateTime?
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config             DeviceConfig?
+  tokens             DeviceToken[]
+  sensorSamples      SensorSample[]
+  notifications      Notification[]
+  notificationEvents NotificationEvent[]
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model DeviceConfig {
+  id                   String   @id @default(cuid())
+  telemetryIntervalSec Int      @default(2)
+  thresholds           Json
+  timerMethod          String   @default("pomodoro")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  deviceId             String   @unique
+  device               Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model SensorSample {
+  id           String   @id @default(cuid())
+  receivedAt   DateTime
+  deviceTs     Int?
+  temperatureC Float?
+  humidityPct  Float?
+  pressureHpa  Float?
+  co2Ppm       Int?
+  tvocPpb      Int?
+  noisePct     Float
+  lightPct     Float
+  wifiHealth   String
+  bme280Health String
+  ccs811Health String
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, receivedAt])
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  title     String
+  body      String
+  type      String
+  severity  NotificationSeverity
+  status    NotificationStatus   @default(PENDING)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  shownAt   DateTime?
+  deviceId  String
+  userId    String
+  device    Device               @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events    NotificationEvent[]
+}
+
+model NotificationEvent {
+  id             String        @id @default(cuid())
+  action         String
+  createdAt      DateTime      @default(now())
+  notificationId String?
+  deviceId       String
+  notification   Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  device         Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, createdAt])
+}
