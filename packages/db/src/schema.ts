@@ -11,7 +11,13 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { DeviceConfig } from "@kori/shared";
+
+type DeviceThresholds = {
+  co2Ppm: number;
+  noisePct: number;
+  temperatureHighC: number;
+  temperatureLowC: number;
+};
 
 export const deviceStatusEnum = pgEnum("device_status", ["PENDING", "ACTIVE", "OFFLINE"]);
 export const notificationSeverityEnum = pgEnum("notification_severity", ["LOW", "MEDIUM", "HIGH"]);
@@ -70,7 +76,7 @@ export const deviceTokens = pgTable("device_tokens", {
 export const deviceConfigs = pgTable("device_configs", {
   id: varchar("id", { length: 64 }).primaryKey(),
   telemetryIntervalSec: integer("telemetry_interval_sec").default(2).notNull(),
-  thresholds: jsonb("thresholds").$type<DeviceConfig["thresholds"]>().notNull(),
+  thresholds: jsonb("thresholds").$type<DeviceThresholds>().notNull(),
   timerMethod: varchar("timer_method", { length: 64 }).default("pomodoro").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
