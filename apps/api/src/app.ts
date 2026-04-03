@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { prisma } from "@kori/db";
+import { closeDb } from "@kori/db";
 import type { AppEnv } from "./config/env.js";
 import { getEnv } from "./config/env.js";
 import servicesPlugin, { type AppServices } from "./plugins/services.js";
@@ -16,11 +16,11 @@ import {
 } from "./services/memory.js";
 import { RedisLiveStateService } from "./services/redis.js";
 import {
-  PrismaDeviceService,
-  PrismaHealthService,
-  PrismaNotificationEventService,
-  PrismaSensorIngestionService
-} from "./services/prisma.js";
+  DrizzleDeviceService,
+  DrizzleHealthService,
+  DrizzleNotificationEventService,
+  DrizzleSensorIngestionService
+} from "./services/drizzle.js";
 import type { RedisClient } from "./services/types.js";
 
 const RedisConstructor = (await import("ioredis")).default as unknown as new (
@@ -67,7 +67,6 @@ export async function buildServer(options: BuildServerOptions = {}) {
       maxRetriesPerRequest: 1
     });
     await redisForClose.connect();
-    await prisma.$connect();
   }
 
   let baseServices: AppServices;
@@ -75,14 +74,14 @@ export async function buildServer(options: BuildServerOptions = {}) {
     baseServices = createDefaultServices();
   } else {
     const redis = redisForClose as RedisClient;
-    const deviceService = new PrismaDeviceService();
+    const deviceService = new DrizzleDeviceService();
     baseServices = {
       bootstrapService: deviceService,
       deviceAuthService: deviceService,
-      healthService: new PrismaHealthService(redis),
+      healthService: new DrizzleHealthService(redis),
       liveStateService: new RedisLiveStateService(redis),
-      sensorIngestionService: new PrismaSensorIngestionService(),
-      notificationEventService: new PrismaNotificationEventService()
+      sensorIngestionService: new DrizzleSensorIngestionService(),
+      notificationEventService: new DrizzleNotificationEventService()
     };
   }
 
@@ -96,7 +95,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
       if (redisForClose) {
         await redisForClose.quit();
       }
-      await prisma.$disconnect();
+      await closeDb();
     }
   });
 

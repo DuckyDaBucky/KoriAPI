@@ -11,7 +11,9 @@
     "dev": "npm run dev --workspace @kori/api",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "prisma:generate": "npm run prisma:generate --workspace @kori/db",
-    "prisma:migrate": "npm run prisma:migrate --workspace @kori/db"
+    "db:generate": "npm run db:generate --workspace @kori/db",
+    "db:migrate": "npm run db:migrate --workspace @kori/db",
+    "db:push": "npm run db:push --workspace @kori/db",
+    "db:seed": "npm run db:seed --workspace @kori/db"
   }
 }

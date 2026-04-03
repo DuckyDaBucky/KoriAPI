@@ -6,7 +6,7 @@ Device-first backend scaffold for Kori.
 
 - `apps/api`: Fastify API and WebSocket runtime
 - `packages/shared`: shared REST and WebSocket contracts
-- `packages/db`: Prisma schema and database client
+- `packages/db`: Drizzle schema, migrations, and Neon database client
 
 ## Phase 1 included
 
@@ -25,7 +25,9 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ```bash
 npm install
-npm run prisma:generate
+npm run db:generate
+npm run db:push
+npm run db:seed
 npm run build
 npm run test
 ```

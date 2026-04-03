@@ -9,15 +9,20 @@
     "build": "tsc -b",
     "test": "npm run build && node --test --test-isolation=none dist/**/*.test.js",
     "typecheck": "tsc -b --pretty false",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:seed": "npm run build && node dist/seed.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.6.0"
+    "@kori/shared": "0.1.0",
+    "@neondatabase/serverless": "^1.0.1",
+    "drizzle-orm": "^0.44.5",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "prisma": "^6.6.0",
+    "drizzle-kit": "^0.31.4",
     "typescript": "^5.8.3"
   }
 }
