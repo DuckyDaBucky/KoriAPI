@@ -3,15 +3,6 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "baseUrl": ".",
-    "paths": {
-      "@kori/shared": [
-        "./packages/shared/src/index.ts"
-      ],
-      "@kori/db": [
-        "./packages/db/src/index.ts"
-      ]
-    },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
