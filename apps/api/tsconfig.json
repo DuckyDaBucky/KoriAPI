@@ -2,18 +2,19 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "baseUrl": "../..",
+    "paths": {
+      "@kori/shared": [
+        "packages/shared/dist/index.d.ts"
+      ],
+      "@kori/db": [
+        "packages/db/dist/index.d.ts"
+      ]
+    }
   },
   "include": [
     "src/**/*.ts",
     "test/**/*.ts"
-  ],
-  "references": [
-    {
-      "path": "../../packages/shared"
-    },
-    {
-      "path": "../../packages/db"
-    }
   ]
 }
