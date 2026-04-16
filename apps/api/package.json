@@ -9,7 +9,7 @@
     "build": "tsc -b",
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "start": "node dist/server.js",
-    "test": "npm run build && node --test --test-isolation=none dist/test/**/*.test.js",
+    "test": "npm run build && node --test dist/test/app.test.js",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

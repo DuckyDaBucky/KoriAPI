@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "test": "npm run build && node --test --test-isolation=none dist/**/*.test.js",
+    "test": "npm run build && node --test dist/schemas.test.js",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
