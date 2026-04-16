@@ -52,8 +52,42 @@ export class MemoryObservabilityService implements ObservabilityService {
     this.emit(event);
   }
 
-  async listLogs(limit = 100): Promise<DeveloperLogEvent[]> {
-    return this.logs.slice(0, limit);
+  async listLogs(input?: {
+    limit?: number;
+    level?: DeveloperLogEvent["level"];
+    route?: string;
+    workspaceId?: string;
+    userId?: string;
+    deviceId?: string;
+    requestId?: string;
+    integration?: string;
+  }): Promise<DeveloperLogEvent[]> {
+    const filtered = this.logs.filter((entry) => {
+      if (input?.level && entry.level !== input.level) {
+        return false;
+      }
+      if (input?.route && entry.route !== input.route) {
+        return false;
+      }
+      if (input?.workspaceId && entry.workspaceId !== input.workspaceId) {
+        return false;
+      }
+      if (input?.userId && entry.userId !== input.userId) {
+        return false;
+      }
+      if (input?.deviceId && entry.deviceId !== input.deviceId) {
+        return false;
+      }
+      if (input?.requestId && entry.requestId !== input.requestId) {
+        return false;
+      }
+      if (input?.integration && entry.integration !== input.integration) {
+        return false;
+      }
+      return true;
+    });
+
+    return filtered.slice(0, input?.limit ?? 100);
   }
 
   async setDeviceState(state: DeviceLiveState): Promise<void> {

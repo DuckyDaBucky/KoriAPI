@@ -634,6 +634,33 @@ export class DrizzleNotesService implements NotesService {
     }));
   }
 
+  async getNote(input: { userId: string; noteId: string }): Promise<Note | null> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return null;
+    }
+
+    const note = await db.query.notes.findFirst({
+      where: and(eq(schema.notes.id, input.noteId), inArray(schema.notes.workspaceId, workspaceIds))
+    });
+
+    if (!note) {
+      return null;
+    }
+
+    return {
+      id: note.id,
+      title: note.title,
+      type: note.type as Note["type"],
+      content: note.content,
+      workspaceId: note.workspaceId,
+      userId: note.userId ?? null,
+      createdAt: note.createdAt.toISOString(),
+      updatedAt: note.updatedAt.toISOString()
+    };
+  }
+
   async createNote(input: {
     workspaceId: string;
     userId: string;
@@ -675,10 +702,73 @@ export class DrizzleNotesService implements NotesService {
     };
   }
 
-  async listRevisions(noteId: string): Promise<NoteRevision[]> {
+  async updateNote(input: {
+    userId: string;
+    noteId: string;
+    title?: string;
+    type?: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content?: string;
+  }): Promise<Note | null> {
     const db = getDb();
+    const existing = await this.getNote({
+      userId: input.userId,
+      noteId: input.noteId
+    });
+    if (!existing) {
+      return null;
+    }
+
+    const updatedAt = new Date();
+    await db
+      .update(schema.notes)
+      .set({
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.content !== undefined ? { content: input.content } : {}),
+        updatedAt
+      })
+      .where(eq(schema.notes.id, input.noteId));
+
+    if (input.content !== undefined) {
+      await db.insert(schema.noteRevisions).values({
+        id: createId("rev"),
+        noteId: input.noteId,
+        userId: input.userId,
+        content: input.content,
+        createdAt: updatedAt
+      });
+    }
+
+    return this.getNote({
+      userId: input.userId,
+      noteId: input.noteId
+    });
+  }
+
+  async deleteNote(input: { userId: string; noteId: string }): Promise<boolean> {
+    const db = getDb();
+    const existing = await this.getNote(input);
+    if (!existing) {
+      return false;
+    }
+
+    await db.delete(schema.noteRevisions).where(eq(schema.noteRevisions.noteId, input.noteId));
+    await db.delete(schema.notes).where(eq(schema.notes.id, input.noteId));
+    return true;
+  }
+
+  async listRevisions(input: { userId: string; noteId: string }): Promise<NoteRevision[]> {
+    const db = getDb();
+    const existing = await this.getNote({
+      userId: input.userId,
+      noteId: input.noteId
+    });
+    if (!existing) {
+      return [];
+    }
+
     const revisions = await db.query.noteRevisions.findMany({
-      where: eq(schema.noteRevisions.noteId, noteId),
+      where: eq(schema.noteRevisions.noteId, input.noteId),
       orderBy: desc(schema.noteRevisions.createdAt)
     });
 
@@ -746,6 +836,32 @@ export class DrizzleDeadlinesService implements DeadlinesService {
     }));
   }
 
+  async getDeadline(input: { userId: string; deadlineId: string }): Promise<Deadline | null> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return null;
+    }
+
+    const deadline = await db.query.deadlines.findFirst({
+      where: and(eq(schema.deadlines.id, input.deadlineId), inArray(schema.deadlines.workspaceId, workspaceIds))
+    });
+    if (!deadline) {
+      return null;
+    }
+
+    return {
+      id: deadline.id,
+      workspaceId: deadline.workspaceId,
+      userId: deadline.userId ?? null,
+      title: deadline.title,
+      dueAt: deadline.dueAt.toISOString(),
+      status: deadline.status,
+      metadata: deadline.metadata,
+      createdAt: deadline.createdAt.toISOString()
+    };
+  }
+
   async createDeadline(input: {
     workspaceId: string;
     userId: string;
@@ -779,6 +895,50 @@ export class DrizzleDeadlinesService implements DeadlinesService {
       createdAt: createdAt.toISOString()
     };
   }
+
+  async updateDeadline(input: {
+    userId: string;
+    deadlineId: string;
+    title?: string;
+    dueAt?: string;
+    status?: Deadline["status"];
+    metadata?: Record<string, unknown>;
+  }): Promise<Deadline | null> {
+    const db = getDb();
+    const existing = await this.getDeadline({
+      userId: input.userId,
+      deadlineId: input.deadlineId
+    });
+    if (!existing) {
+      return null;
+    }
+
+    await db
+      .update(schema.deadlines)
+      .set({
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.dueAt !== undefined ? { dueAt: new Date(input.dueAt) } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
+      })
+      .where(eq(schema.deadlines.id, input.deadlineId));
+
+    return this.getDeadline({
+      userId: input.userId,
+      deadlineId: input.deadlineId
+    });
+  }
+
+  async deleteDeadline(input: { userId: string; deadlineId: string }): Promise<boolean> {
+    const db = getDb();
+    const existing = await this.getDeadline(input);
+    if (!existing) {
+      return false;
+    }
+
+    await db.delete(schema.deadlines).where(eq(schema.deadlines.id, input.deadlineId));
+    return true;
+  }
 }
 
 export class DrizzleRecommendationsService implements RecommendationsService {
@@ -807,6 +967,41 @@ export class DrizzleRecommendationsService implements RecommendationsService {
       createdAt: recommendation.createdAt.toISOString(),
       deliveredAt: recommendation.deliveredAt?.toISOString() ?? null
     }));
+  }
+
+  async getRecommendation(input: {
+    userId: string;
+    recommendationId: string;
+  }): Promise<Recommendation | null> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return null;
+    }
+
+    const recommendation = await db.query.recommendations.findFirst({
+      where: and(
+        eq(schema.recommendations.id, input.recommendationId),
+        or(
+          eq(schema.recommendations.userId, input.userId),
+          inArray(schema.recommendations.workspaceId, workspaceIds)
+        )
+      )
+    });
+    if (!recommendation) {
+      return null;
+    }
+
+    return {
+      id: recommendation.id,
+      workspaceId: recommendation.workspaceId,
+      userId: recommendation.userId ?? null,
+      type: recommendation.type,
+      title: recommendation.title,
+      body: recommendation.body,
+      createdAt: recommendation.createdAt.toISOString(),
+      deliveredAt: recommendation.deliveredAt?.toISOString() ?? null
+    };
   }
 
   async createRecommendation(input: {
@@ -839,6 +1034,52 @@ export class DrizzleRecommendationsService implements RecommendationsService {
       createdAt: createdAt.toISOString(),
       deliveredAt: null
     };
+  }
+
+  async updateRecommendation(input: {
+    userId: string;
+    recommendationId: string;
+    type?: string;
+    title?: string;
+    body?: string;
+    deliveredAt?: string | null;
+  }): Promise<Recommendation | null> {
+    const db = getDb();
+    const existing = await this.getRecommendation({
+      userId: input.userId,
+      recommendationId: input.recommendationId
+    });
+    if (!existing) {
+      return null;
+    }
+
+    await db
+      .update(schema.recommendations)
+      .set({
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.deliveredAt !== undefined
+          ? { deliveredAt: input.deliveredAt ? new Date(input.deliveredAt) : null }
+          : {})
+      })
+      .where(eq(schema.recommendations.id, input.recommendationId));
+
+    return this.getRecommendation({
+      userId: input.userId,
+      recommendationId: input.recommendationId
+    });
+  }
+
+  async deleteRecommendation(input: { userId: string; recommendationId: string }): Promise<boolean> {
+    const db = getDb();
+    const existing = await this.getRecommendation(input);
+    if (!existing) {
+      return false;
+    }
+
+    await db.delete(schema.recommendations).where(eq(schema.recommendations.id, input.recommendationId));
+    return true;
   }
 }
 

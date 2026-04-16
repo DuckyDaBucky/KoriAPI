@@ -486,6 +486,10 @@ export class MemoryNotesService implements NotesService {
     return this.notes.get(input.userId) ?? [];
   }
 
+  async getNote(input: { userId: string; noteId: string }) {
+    return (this.notes.get(input.userId) ?? []).find((note) => note.id === input.noteId) ?? null;
+  }
+
   async createNote(input: {
     workspaceId: string;
     userId: string;
@@ -517,8 +521,68 @@ export class MemoryNotesService implements NotesService {
     return note;
   }
 
-  async listRevisions(noteId: string) {
-    return this.revisions.get(noteId) ?? [];
+  async updateNote(input: {
+    userId: string;
+    noteId: string;
+    title?: string;
+    type?: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content?: string;
+  }) {
+    const notes = this.notes.get(input.userId) ?? [];
+    const existing = notes.find((note) => note.id === input.noteId);
+    if (!existing) {
+      return null;
+    }
+
+    const updated = {
+      ...existing,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.content !== undefined ? { content: input.content } : {}),
+      updatedAt: new Date().toISOString()
+    };
+
+    this.notes.set(
+      input.userId,
+      notes.map((note) => (note.id === input.noteId ? updated : note))
+    );
+
+    if (input.content !== undefined) {
+      const revisions = this.revisions.get(input.noteId) ?? [];
+      this.revisions.set(input.noteId, [
+        {
+          id: `rev_${Date.now()}`,
+          noteId: input.noteId,
+          content: input.content,
+          userId: input.userId,
+          createdAt: updated.updatedAt
+        },
+        ...revisions
+      ]);
+    }
+
+    return updated;
+  }
+
+  async deleteNote(input: { userId: string; noteId: string }) {
+    const notes = this.notes.get(input.userId) ?? [];
+    const next = notes.filter((note) => note.id !== input.noteId);
+    if (next.length === notes.length) {
+      return false;
+    }
+
+    this.notes.set(input.userId, next);
+    this.revisions.delete(input.noteId);
+    return true;
+  }
+
+  async listRevisions(input: { userId: string; noteId: string }) {
+    const note = await this.getNote(input);
+    if (!note) {
+      return [];
+    }
+
+    return this.revisions.get(input.noteId) ?? [];
   }
 
   async createRevision(input: { noteId: string; userId: string; content: string }) {
@@ -558,6 +622,10 @@ export class MemoryDeadlinesService implements DeadlinesService {
     return this.deadlines.get(input.userId) ?? [];
   }
 
+  async getDeadline(input: { userId: string; deadlineId: string }) {
+    return (this.deadlines.get(input.userId) ?? []).find((deadline) => deadline.id === input.deadlineId) ?? null;
+  }
+
   async createDeadline(input: {
     workspaceId: string;
     userId: string;
@@ -579,13 +647,64 @@ export class MemoryDeadlinesService implements DeadlinesService {
     this.deadlines.set(input.userId, [deadline, ...existing]);
     return deadline;
   }
+
+  async updateDeadline(input: {
+    userId: string;
+    deadlineId: string;
+    title?: string;
+    dueAt?: string;
+    status?: "OPEN" | "COMPLETED" | "MISSED";
+    metadata?: Record<string, unknown>;
+  }) {
+    const deadlines = this.deadlines.get(input.userId) ?? [];
+    const existing = deadlines.find((deadline) => deadline.id === input.deadlineId);
+    if (!existing) {
+      return null;
+    }
+
+    const updated = {
+      ...existing,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.dueAt !== undefined ? { dueAt: input.dueAt } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
+    };
+
+    this.deadlines.set(
+      input.userId,
+      deadlines.map((deadline) => (deadline.id === input.deadlineId ? updated : deadline))
+    );
+    return updated;
+  }
+
+  async deleteDeadline(input: { userId: string; deadlineId: string }) {
+    const deadlines = this.deadlines.get(input.userId) ?? [];
+    const next = deadlines.filter((deadline) => deadline.id !== input.deadlineId);
+    if (next.length === deadlines.length) {
+      return false;
+    }
+
+    this.deadlines.set(input.userId, next);
+    return true;
+  }
 }
 
 export class MemoryRecommendationsService implements RecommendationsService {
   private readonly recommendations = new Map<string, Array<Awaited<ReturnType<RecommendationsService["createRecommendation"]>>>>();
 
   async listRecommendations(input: { userId: string }) {
-    return this.recommendations.get(input.userId) ?? [];
+    return [
+      ...(this.recommendations.get(input.userId) ?? []),
+      ...(this.recommendations.get("__workspace__") ?? [])
+    ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async getRecommendation(input: { userId: string; recommendationId: string }) {
+    return (
+      [...(this.recommendations.get(input.userId) ?? []), ...(this.recommendations.get("__workspace__") ?? [])].find(
+        (recommendation) => recommendation.id === input.recommendationId
+      ) ?? null
+    );
   }
 
   async createRecommendation(input: {
@@ -609,6 +728,54 @@ export class MemoryRecommendationsService implements RecommendationsService {
     const existing = this.recommendations.get(key) ?? [];
     this.recommendations.set(key, [recommendation, ...existing]);
     return recommendation;
+  }
+
+  async updateRecommendation(input: {
+    userId: string;
+    recommendationId: string;
+    type?: string;
+    title?: string;
+    body?: string;
+    deliveredAt?: string | null;
+  }) {
+    for (const key of [input.userId, "__workspace__"]) {
+      const recommendations = this.recommendations.get(key) ?? [];
+      const existing = recommendations.find((recommendation) => recommendation.id === input.recommendationId);
+      if (!existing) {
+        continue;
+      }
+
+      const updated = {
+        ...existing,
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.deliveredAt !== undefined ? { deliveredAt: input.deliveredAt } : {})
+      };
+
+      this.recommendations.set(
+        key,
+        recommendations.map((recommendation) =>
+          recommendation.id === input.recommendationId ? updated : recommendation
+        )
+      );
+      return updated;
+    }
+
+    return null;
+  }
+
+  async deleteRecommendation(input: { userId: string; recommendationId: string }) {
+    for (const key of [input.userId, "__workspace__"]) {
+      const recommendations = this.recommendations.get(key) ?? [];
+      const next = recommendations.filter((recommendation) => recommendation.id !== input.recommendationId);
+      if (next.length !== recommendations.length) {
+        this.recommendations.set(key, next);
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 

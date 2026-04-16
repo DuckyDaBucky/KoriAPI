@@ -148,6 +148,16 @@
             <h2>Live Logs</h2>
             <button data-refresh="logs">Refresh</button>
           </div>
+          <form id="log-filter-form" class="stacked">
+            <input name="level" placeholder="level: debug|info|warn|error" />
+            <input name="route" placeholder="route filter" />
+            <input name="workspaceId" placeholder="workspaceId filter" />
+            <input name="deviceId" placeholder="deviceId filter" />
+            <input name="userId" placeholder="userId filter" />
+            <input name="requestId" placeholder="requestId filter" />
+            <input name="integration" placeholder="integration filter" />
+            <button type="submit">Apply log filters</button>
+          </form>
           <pre id="logs-output">No log events yet.</pre>
         </article>
         <article class="panel log-panel">
@@ -175,8 +185,72 @@
         </form>
         <pre id="request-output"></pre>
       </section>
+
+      <section class="grid two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Contracts</h2>
+            <button data-refresh="contracts">Refresh</button>
+          </div>
+          <pre id="contracts-output">No contract data yet.</pre>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Entity Actions</h2>
+            <span class="muted">Targeted update/delete helpers for iterative testing</span>
+          </div>
+
+          <form id="note-action-form" class="stacked">
+            <input name="noteId" placeholder="noteId" />
+            <select name="method">
+              <option>GET</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+            </select>
+            <input name="title" placeholder="title (PATCH)" />
+            <select name="type">
+              <option value="">type (optional)</option>
+              <option>markdown</option>
+              <option>txt</option>
+              <option>latex</option>
+              <option>mermaid</option>
+              <option>drawing</option>
+            </select>
+            <textarea name="content" rows="3" placeholder="content (PATCH)"></textarea>
+            <button type="submit">Run note action</button>
+          </form>
+
+          <form id="deadline-action-form" class="stacked">
+            <input name="deadlineId" placeholder="deadlineId" />
+            <select name="method">
+              <option>GET</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+            </select>
+            <input name="title" placeholder="title (PATCH)" />
+            <input name="dueAt" placeholder="dueAt (PATCH)" />
+            <input name="status" placeholder="status: OPEN|COMPLETED|MISSED" />
+            <textarea name="metadata" rows="3" placeholder='metadata JSON (PATCH), e.g. {"source":"dashboard"}'></textarea>
+            <button type="submit">Run deadline action</button>
+          </form>
+
+          <form id="recommendation-action-form" class="stacked">
+            <input name="recommendationId" placeholder="recommendationId" />
+            <select name="method">
+              <option>GET</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+            </select>
+            <input name="type" placeholder="type (PATCH)" />
+            <input name="title" placeholder="title (PATCH)" />
+            <textarea name="body" rows="3" placeholder="body (PATCH)"></textarea>
+            <input name="deliveredAt" placeholder="deliveredAt ISO or null (PATCH)" />
+            <button type="submit">Run recommendation action</button>
+          </form>
+        </article>
+      </section>
     </main>
 
     <script src="/admin/dashboard/app.js" type="module"></script>
   </body>
-  </html>
+</html>

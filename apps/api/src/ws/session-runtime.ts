@@ -69,7 +69,7 @@ export async function attachSessionSocket(
   }
 
   const [recentLogs, deviceStates, spotifyPresence, auditEvents, health] = await Promise.all([
-    app.services.observabilityService.listLogs(50),
+    app.services.observabilityService.listLogs({ limit: 50 }),
     app.services.observabilityService.listDeviceStates(),
     app.services.observabilityService.listSpotifyPresence(),
     app.services.auditService.listRecent(50),

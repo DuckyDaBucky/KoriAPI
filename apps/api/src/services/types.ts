@@ -160,7 +160,16 @@ export interface AuditService {
 
 export interface ObservabilityService {
   log(event: Omit<DeveloperLogEvent, "id" | "createdAt"> & { createdAt?: string }): Promise<DeveloperLogEvent>;
-  listLogs(limit?: number): Promise<DeveloperLogEvent[]>;
+  listLogs(input?: {
+    limit?: number;
+    level?: DeveloperLogEvent["level"];
+    route?: string;
+    workspaceId?: string;
+    userId?: string;
+    deviceId?: string;
+    requestId?: string;
+    integration?: string;
+  }): Promise<DeveloperLogEvent[]>;
   publish(event: AdminStreamEvent): Promise<void>;
   setDeviceState(state: DeviceLiveState): Promise<void>;
   removeDeviceState(deviceId: string): Promise<void>;
@@ -219,6 +228,7 @@ export interface WorkspaceService {
 
 export interface NotesService {
   listNotes(input: { userId: string }): Promise<Note[]>;
+  getNote(input: { userId: string; noteId: string }): Promise<Note | null>;
   createNote(input: {
     workspaceId: string;
     userId: string;
@@ -226,12 +236,21 @@ export interface NotesService {
     type: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
     content: string;
   }): Promise<Note>;
-  listRevisions(noteId: string): Promise<NoteRevision[]>;
+  updateNote(input: {
+    userId: string;
+    noteId: string;
+    title?: string;
+    type?: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content?: string;
+  }): Promise<Note | null>;
+  deleteNote(input: { userId: string; noteId: string }): Promise<boolean>;
+  listRevisions(input: { userId: string; noteId: string }): Promise<NoteRevision[]>;
   createRevision(input: { noteId: string; userId: string; content: string }): Promise<NoteRevision>;
 }
 
 export interface DeadlinesService {
   listDeadlines(input: { userId: string }): Promise<Deadline[]>;
+  getDeadline(input: { userId: string; deadlineId: string }): Promise<Deadline | null>;
   createDeadline(input: {
     workspaceId: string;
     userId: string;
@@ -239,10 +258,20 @@ export interface DeadlinesService {
     dueAt: string;
     metadata: Record<string, unknown>;
   }): Promise<Deadline>;
+  updateDeadline(input: {
+    userId: string;
+    deadlineId: string;
+    title?: string;
+    dueAt?: string;
+    status?: Deadline["status"];
+    metadata?: Record<string, unknown>;
+  }): Promise<Deadline | null>;
+  deleteDeadline(input: { userId: string; deadlineId: string }): Promise<boolean>;
 }
 
 export interface RecommendationsService {
   listRecommendations(input: { userId: string }): Promise<Recommendation[]>;
+  getRecommendation(input: { userId: string; recommendationId: string }): Promise<Recommendation | null>;
   createRecommendation(input: {
     workspaceId: string;
     userId?: string;
@@ -250,6 +279,15 @@ export interface RecommendationsService {
     title: string;
     body: string;
   }): Promise<Recommendation>;
+  updateRecommendation(input: {
+    userId: string;
+    recommendationId: string;
+    type?: string;
+    title?: string;
+    body?: string;
+    deliveredAt?: string | null;
+  }): Promise<Recommendation | null>;
+  deleteRecommendation(input: { userId: string; recommendationId: string }): Promise<boolean>;
 }
 
 export interface TelemetryService {

@@ -98,6 +98,16 @@ export const noteCreateRequestSchema = z.object({
   content: z.string().default("")
 });
 
+export const noteUpdateRequestSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    type: z.enum(["markdown", "txt", "latex", "mermaid", "drawing"]).optional(),
+    content: z.string().optional()
+  })
+  .refine((value) => value.title !== undefined || value.type !== undefined || value.content !== undefined, {
+    message: "At least one note field must be provided"
+  });
+
 export const noteRevisionCreateRequestSchema = z.object({
   content: z.string()
 });
@@ -121,6 +131,24 @@ export const deadlineCreateRequestSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({})
 });
 
+export const deadlineUpdateRequestSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    dueAt: z.string().datetime().optional(),
+    status: z.enum(["OPEN", "COMPLETED", "MISSED"]).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional()
+  })
+  .refine(
+    (value) =>
+      value.title !== undefined ||
+      value.dueAt !== undefined ||
+      value.status !== undefined ||
+      value.metadata !== undefined,
+    {
+      message: "At least one deadline field must be provided"
+    }
+  );
+
 export const recommendationSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -140,6 +168,24 @@ export const recommendationCreateRequestSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().min(1)
 });
+
+export const recommendationUpdateRequestSchema = z
+  .object({
+    type: z.string().min(1).max(64).optional(),
+    title: z.string().min(1).max(200).optional(),
+    body: z.string().min(1).optional(),
+    deliveredAt: z.string().datetime().nullable().optional()
+  })
+  .refine(
+    (value) =>
+      value.type !== undefined ||
+      value.title !== undefined ||
+      value.body !== undefined ||
+      value.deliveredAt !== undefined,
+    {
+      message: "At least one recommendation field must be provided"
+    }
+  );
 
 export const telemetryBucketSchema = z.object({
   bucketStart: z.string().datetime(),
@@ -419,6 +465,25 @@ export const adminOverviewSchema = z.object({
     database: z.enum(["up", "down"]),
     redis: z.enum(["up", "down"])
   })
+});
+
+export const adminContractsSchema = z.object({
+  generatedAt: z.string().datetime(),
+  rest: z.array(
+    z.object({
+      method: z.enum(["GET", "POST", "PATCH", "DELETE"]),
+      path: z.string(),
+      auth: z.enum(["public", "session", "admin", "device"]),
+      summary: z.string()
+    })
+  ),
+  websocket: z.object({
+    devicePath: z.string(),
+    sessionPath: z.string(),
+    inboundTypes: z.array(z.string()),
+    outboundTypes: z.array(z.string())
+  }),
+  sharedSchemas: z.array(z.string())
 });
 
 export const spotifyConnectionStatusSchema = z.object({

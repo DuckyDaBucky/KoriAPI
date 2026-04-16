@@ -298,6 +298,30 @@ test("notes deadlines recommendations and telemetry routes work with a session",
   });
   assert.equal(notes.statusCode, 200);
   assert.equal(notes.json().length, 1);
+  const noteId = notes.json()[0].id as string;
+
+  const noteUpdate = await app.inject({
+    method: "PATCH",
+    url: `/v1/notes/${noteId}`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      content: "# revised"
+    }
+  });
+  assert.equal(noteUpdate.statusCode, 200);
+  assert.equal(noteUpdate.json().content, "# revised");
+
+  const revisions = await app.inject({
+    method: "GET",
+    url: `/v1/notes/${noteId}/revisions`,
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(revisions.statusCode, 200);
+  assert.equal(revisions.json().length, 2);
 
   const deadlines = await app.inject({
     method: "GET",
@@ -308,6 +332,20 @@ test("notes deadlines recommendations and telemetry routes work with a session",
   });
   assert.equal(deadlines.statusCode, 200);
   assert.equal(deadlines.json().length, 1);
+  const deadlineId = deadlines.json()[0].id as string;
+
+  const deadlineUpdate = await app.inject({
+    method: "PATCH",
+    url: `/v1/deadlines/${deadlineId}`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      status: "COMPLETED"
+    }
+  });
+  assert.equal(deadlineUpdate.statusCode, 200);
+  assert.equal(deadlineUpdate.json().status, "COMPLETED");
 
   const recommendations = await app.inject({
     method: "GET",
@@ -318,6 +356,20 @@ test("notes deadlines recommendations and telemetry routes work with a session",
   });
   assert.equal(recommendations.statusCode, 200);
   assert.equal(recommendations.json().length, 1);
+  const recommendationId = recommendations.json()[0].id as string;
+
+  const recommendationUpdate = await app.inject({
+    method: "PATCH",
+    url: `/v1/recommendations/${recommendationId}`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      deliveredAt: "2026-04-16T12:00:00.000Z"
+    }
+  });
+  assert.equal(recommendationUpdate.statusCode, 200);
+  assert.equal(recommendationUpdate.json().deliveredAt, "2026-04-16T12:00:00.000Z");
 
   const telemetry = await app.inject({
     method: "GET",
@@ -328,6 +380,55 @@ test("notes deadlines recommendations and telemetry routes work with a session",
   });
   assert.equal(telemetry.statusCode, 200);
   assert.ok(Array.isArray(telemetry.json().buckets));
+
+  await app.close();
+});
+
+test("admin contracts and filtered logs endpoints are available", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
+  await app.inject({
+    method: "GET",
+    url: "/v1/workspaces",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+
+  const contracts = await app.inject({
+    method: "GET",
+    url: "/v1/admin/contracts",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+
+  assert.equal(contracts.statusCode, 200);
+  assert.ok(Array.isArray(contracts.json().rest));
+  assert.equal(contracts.json().websocket.sessionPath, "/v1/ws/session");
+
+  const logs = await app.inject({
+    method: "GET",
+    url: "/v1/admin/logs?route=/v1/workspaces&level=info",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+
+  assert.equal(logs.statusCode, 200);
+  assert.ok(logs.json().every((entry: { route: string | null; level: string }) => entry.route === "/v1/workspaces"));
 
   await app.close();
 });
