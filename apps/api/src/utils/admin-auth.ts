@@ -19,7 +19,7 @@ export function extractAdminToken(request: FastifyRequest): string | null {
 }
 
 export function isAdminAuthorized(token: string | null, env: AppEnv): boolean {
-  return Boolean(token) && safeTokenCompare(token, env.ADMIN_API_KEY);
+  return token !== null && safeTokenCompare(token, env.ADMIN_API_KEY);
 }
 
 export function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {

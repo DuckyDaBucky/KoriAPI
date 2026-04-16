@@ -1,17 +1,16 @@
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { createDbClient, schema } from "@kori/db";
+import type { AuditEvent, DeviceConfig } from "@kori/shared";
 import { deviceConfigSchema } from "@kori/shared";
 import { randomUUID } from "node:crypto";
 import { generateOpaqueToken, sha256 } from "../utils/crypto.js";
 import { evaluateRules } from "./rules.js";
 import type {
   AdminStreamEvent,
-  AuditEvent,
   AuthenticatedDevice,
   BootstrapResult,
   BootstrapService,
   DeviceAuthService,
-  DeviceConfig,
   DeviceRegistryRecord,
   DeviceRegistryService,
   HealthService,
@@ -314,7 +313,7 @@ export class DrizzleDeviceService implements BootstrapService, DeviceAuthService
       orderBy: desc(schema.devices.updatedAt)
     });
 
-    return devices.map((device) => ({
+    return devices.map((device: (typeof devices)[number]) => ({
       id: device.id,
       hardwareId: device.hardwareId,
       userId: device.userId,
@@ -405,7 +404,7 @@ export class DrizzleAuditService implements AuditService {
       limit
     });
 
-    return rows.map((row) => ({
+    return rows.map((row: (typeof rows)[number]) => ({
       id: row.id,
       action: row.action,
       actorType: row.actorType,

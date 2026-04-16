@@ -93,7 +93,12 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const body = provisioningCodeRequestSchema.parse(request.body);
-    const result = await app.services.provisioningCodeService.createCode(body);
+    const result = await app.services.provisioningCodeService.createCode({
+      workspaceId: body.workspaceId,
+      userId: body.userId,
+      expiresInSec: body.expiresInSec,
+      ...(body.label !== undefined ? { label: body.label } : {})
+    });
     await app.services.auditService.record({
       action: "provisioning_code.created",
       actorType: "admin",

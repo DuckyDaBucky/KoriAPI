@@ -1,21 +1,10 @@
 import { randomUUID } from "node:crypto";
+import type { AuditEvent, DeviceLiveState, DeveloperLogEvent, SpotifyPresence } from "@kori/shared";
 import type {
   AdminStreamEvent,
   AuditService,
-  AuditEvent,
-  DeviceLiveState,
-  DeveloperLogEvent,
   ObservabilityService,
-  SpotifyPresence
 } from "./types.js";
-
-function sortNewest<T extends { createdAt?: string; observedAt?: string; lastSeenAt?: string }>(items: T[]): T[] {
-  return [...items].sort((left, right) => {
-    const leftValue = left.createdAt ?? left.observedAt ?? left.lastSeenAt ?? "";
-    const rightValue = right.createdAt ?? right.observedAt ?? right.lastSeenAt ?? "";
-    return rightValue.localeCompare(leftValue);
-  });
-}
 
 export class MemoryAuditService implements AuditService {
   private readonly events: AuditEvent[] = [];
@@ -87,12 +76,12 @@ export class MemoryObservabilityService implements ObservabilityService {
   }
 
   async listDeviceStates(): Promise<DeviceLiveState[]> {
-    return sortNewest(
-      [...this.deviceStates.values()].map((state) => ({
+    return [...this.deviceStates.values()]
+      .map((state) => ({
         ...state,
         lastSeenAt: state.lastSeenAt ?? state.connectedAt
       }))
-    );
+      .sort((left, right) => (right.lastSeenAt ?? "").localeCompare(left.lastSeenAt ?? ""));
   }
 
   async setSpotifyPresence(presence: SpotifyPresence): Promise<void> {
@@ -101,7 +90,7 @@ export class MemoryObservabilityService implements ObservabilityService {
   }
 
   async listSpotifyPresence(): Promise<SpotifyPresence[]> {
-    return sortNewest([...this.spotifyPresence.values()]);
+    return [...this.spotifyPresence.values()].sort((left, right) => right.observedAt.localeCompare(left.observedAt));
   }
 
   subscribe(listener: (event: AdminStreamEvent) => void): () => void {

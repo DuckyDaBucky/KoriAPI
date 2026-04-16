@@ -4,8 +4,8 @@ import { decodeSpotifyState } from "../services/spotify.js";
 import { requireAdmin } from "../utils/admin-auth.js";
 
 function getUserIdFromRequest(request: {
-  query?: Record<string, unknown>;
-  body?: Record<string, unknown>;
+  query?: Record<string, unknown> | undefined;
+  body?: Record<string, unknown> | undefined;
 }): string | null {
   const queryUserId = request.query?.userId;
   if (typeof queryUserId === "string" && queryUserId.length > 0) {

@@ -6,10 +6,10 @@
     "baseUrl": "../..",
     "paths": {
       "@kori/shared": [
-        "packages/shared/dist/index.d.ts"
+        "packages/shared/src/index.ts"
       ],
       "@kori/db": [
-        "packages/db/dist/index.d.ts"
+        "packages/db/src/index.ts"
       ]
     }
   },

@@ -20,8 +20,12 @@ const deviceRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const result = await app.services.bootstrapService.bootstrap({
-        ...body,
-        wsUrl: app.config.PUBLIC_WS_URL
+        hardwareId: body.hardwareId,
+        deviceName: body.deviceName,
+        firmwareVersion: body.firmwareVersion,
+        wsUrl: app.config.PUBLIC_WS_URL,
+        ...(body.userApiKey !== undefined ? { userApiKey: body.userApiKey } : {}),
+        ...(body.provisioningCode !== undefined ? { provisioningCode: body.provisioningCode } : {})
       });
 
       return reply.code(201).send(bootstrapResponseSchema.parse(result));
