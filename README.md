@@ -30,6 +30,7 @@ Important variables:
 - `ADMIN_API_KEY`: admin access for `/v1/admin/*` and the dashboard
 - `APP_ENCRYPTION_KEY`: encryption key for protected integration secrets
 - `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`: Spotify presence integration
+- `SEED_USER_EMAIL`, `SEED_USER_PASSWORD`: local auth bootstrap account for login-backed dashboard access
 
 ## Commands
 

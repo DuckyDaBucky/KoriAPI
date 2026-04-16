@@ -1,10 +1,13 @@
 import type {
+  AuthSessionResponse,
+  AuthUser as SharedAuthUser,
   AuditEvent,
   DeviceConfig,
   DeviceLiveState,
   DeveloperLogEvent,
   NotificationSeverity,
   SpotifyPresence,
+  Workspace,
   WorkspaceRole
 } from "@kori/shared";
 
@@ -186,4 +189,24 @@ export interface AdminSession {
 export interface AdminStreamEvent {
   type: "admin:log" | "admin:device_state" | "admin:audit" | "admin:spotify_presence" | "admin:overview";
   payload: DeveloperLogEvent | DeviceLiveState | AuditEvent | SpotifyPresence | Record<string, unknown>;
+}
+
+export type AuthUser = SharedAuthUser;
+export type AuthSession = AuthSessionResponse;
+export type WorkspaceMembership = Workspace;
+
+export interface AuthService {
+  register(input: {
+    email: string;
+    password: string;
+    name?: string;
+    workspaceName?: string;
+  }): Promise<AuthSession>;
+  login(input: { email: string; password: string }): Promise<AuthSession | null>;
+  getSession(token: string): Promise<AuthSession | null>;
+  logout(token: string): Promise<void>;
+}
+
+export interface WorkspaceService {
+  listForUser(userId: string): Promise<WorkspaceMembership[]>;
 }

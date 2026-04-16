@@ -1,9 +1,15 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, scryptSync, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { createDbClient, schema } from "./index.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("base64url");
+  const derived = scryptSync(password, salt, 64).toString("base64url");
+  return `${salt}:${derived}`;
 }
 
 function envOrThrow(name: string): string {
@@ -26,6 +32,7 @@ function slugify(value: string): string {
 const db = createDbClient(envOrThrow("DATABASE_URL"));
 const email = envOrThrow("SEED_USER_EMAIL");
 const name = process.env.SEED_USER_NAME ?? "Kori Owner";
+const password = process.env.SEED_USER_PASSWORD ?? "ChangeMe123!";
 const userApiKey = envOrThrow("SEED_USER_API_KEY");
 const workspaceName = process.env.SEED_WORKSPACE_NAME ?? "Kori Default Workspace";
 
@@ -39,8 +46,17 @@ if (!existingUser) {
   await db.insert(schema.users).values({
     id: userId,
     email,
-    name
+    name,
+    passwordHash: hashPassword(password)
   });
+} else if (!existingUser.passwordHash) {
+  await db
+    .update(schema.users)
+    .set({
+      passwordHash: hashPassword(password),
+      updatedAt: new Date()
+    })
+    .where(eq(schema.users.id, userId));
 }
 
 const workspaceSlug = slugify(workspaceName);
@@ -102,4 +118,4 @@ if (!existingApiKey) {
   });
 }
 
-console.log(`Seeded user ${email} with workspace ${workspaceName} and bootstrap API key.`);
+console.log(`Seeded user ${email} with workspace ${workspaceName}, password auth, and bootstrap API key.`);

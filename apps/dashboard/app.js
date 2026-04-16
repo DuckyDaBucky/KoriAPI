@@ -1,10 +1,14 @@
 const state = {
   adminToken: localStorage.getItem("kori.adminToken") ?? "",
+  sessionToken: localStorage.getItem("kori.sessionToken") ?? "",
   socket: null
 };
 
 const elements = {
   authForm: document.querySelector("#auth-form"),
+  email: document.querySelector("#email"),
+  password: document.querySelector("#password"),
+  loginButton: document.querySelector("#login-button"),
   adminToken: document.querySelector("#admin-token"),
   overview: document.querySelector("#overview-output"),
   devices: document.querySelector("#devices-output"),
@@ -24,6 +28,14 @@ if (elements.adminToken) {
   elements.adminToken.value = state.adminToken;
 }
 
+function authHeaders(extra = {}) {
+  return {
+    ...(state.sessionToken ? { "x-kori-session": state.sessionToken } : {}),
+    ...(state.adminToken ? { "x-kori-admin-key": state.adminToken } : {}),
+    ...extra
+  };
+}
+
 function pretty(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -33,8 +45,7 @@ async function api(path, options = {}) {
     ...options,
     headers: {
       "content-type": "application/json",
-      "x-kori-admin-key": state.adminToken,
-      ...(options.headers ?? {})
+      ...authHeaders(options.headers ?? {})
     }
   });
 
@@ -81,7 +92,7 @@ function connectSocket() {
 
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   const socket = new WebSocket(
-    `${protocol}//${location.host}/v1/ws/session?stream=admin&adminToken=${encodeURIComponent(state.adminToken)}`
+    `${protocol}//${location.host}/v1/ws/session?stream=admin&adminToken=${encodeURIComponent(state.adminToken)}&sessionToken=${encodeURIComponent(state.sessionToken)}`
   );
   state.socket = socket;
 
@@ -117,6 +128,25 @@ elements.authForm?.addEventListener("submit", async (event) => {
   localStorage.setItem("kori.adminToken", state.adminToken);
 
   try {
+    await refreshAll();
+    connectSocket();
+  } catch (error) {
+    elements.overview.textContent = error.message;
+  }
+});
+
+elements.loginButton?.addEventListener("click", async () => {
+  try {
+    const session = await api("/v1/auth/login", {
+      method: "POST",
+      headers: state.adminToken ? { "x-kori-admin-key": state.adminToken } : {},
+      body: JSON.stringify({
+        email: elements.email.value.trim(),
+        password: elements.password.value
+      })
+    });
+    state.sessionToken = session.sessionToken;
+    localStorage.setItem("kori.sessionToken", state.sessionToken);
     await refreshAll();
     connectSocket();
   } catch (error) {

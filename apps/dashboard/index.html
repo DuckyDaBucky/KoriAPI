@@ -17,9 +17,15 @@
           </p>
         </div>
         <form id="auth-form" class="token-card">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" placeholder="owner@example.com" value="owner@example.com" />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" placeholder="ChangeMe123!" />
+          <button type="button" id="login-button">Login with session</button>
+          <div class="divider"></div>
           <label for="admin-token">Admin token</label>
           <input id="admin-token" name="admin-token" type="password" placeholder="Paste ADMIN_API_KEY" />
-          <button type="submit">Connect</button>
+          <button type="submit">Connect with admin key</button>
         </form>
       </header>
 

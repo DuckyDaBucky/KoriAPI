@@ -64,6 +64,12 @@ body {
   padding: 1rem;
 }
 
+.divider {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.18);
+  margin: 0.25rem 0;
+}
+
 .grid {
   display: grid;
   gap: 1rem;

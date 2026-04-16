@@ -2,7 +2,7 @@ import { URL } from "node:url";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { wsEventTypes } from "@kori/shared";
-import { extractAdminToken, isAdminAuthorized } from "../utils/admin-auth.js";
+import { extractAdminToken, extractSessionToken, isAdminAuthorized } from "../utils/admin-auth.js";
 import type { AdminStreamEvent } from "../services/types.js";
 
 function nowUnix(): number {
@@ -44,6 +44,7 @@ export async function attachSessionSocket(
 ): Promise<void> {
   const parsedUrl = new URL(request.url, "http://localhost");
   const queryToken = parsedUrl.searchParams.get("adminToken");
+  const querySession = parsedUrl.searchParams.get("sessionToken");
   const token = extractAdminToken({
     headers: request.headers,
     query: {
@@ -52,8 +53,19 @@ export async function attachSessionSocket(
   } as never);
 
   if (!isAdminAuthorized(token, app.config)) {
-    socket.close(4001, "unauthorized");
-    return;
+    const sessionToken = extractSessionToken({
+      headers: request.headers,
+      query: { sessionToken: querySession }
+    } as never);
+    const session = sessionToken ? await app.services.authService.getSession(sessionToken) : null;
+    const hasAdminRole = Boolean(
+      session?.user.roles.some((role) => role === "platform_admin" || role === "workspace_admin")
+    );
+
+    if (!hasAdminRole) {
+      socket.close(4001, "unauthorized");
+      return;
+    }
   }
 
   const [recentLogs, deviceStates, spotifyPresence, auditEvents, health] = await Promise.all([

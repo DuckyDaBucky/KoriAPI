@@ -3,10 +3,13 @@ import { createDbClient, schema } from "@kori/db";
 import type { AuditEvent, DeviceConfig } from "@kori/shared";
 import { deviceConfigSchema } from "@kori/shared";
 import { randomUUID } from "node:crypto";
-import { generateOpaqueToken, sha256 } from "../utils/crypto.js";
+import { generateOpaqueToken, hashPassword, sha256, verifyPassword } from "../utils/crypto.js";
 import { evaluateRules } from "./rules.js";
 import type {
   AdminStreamEvent,
+  AuthService,
+  AuthSession,
+  AuthUser,
   AuthenticatedDevice,
   BootstrapResult,
   BootstrapService,
@@ -22,7 +25,9 @@ import type {
   SensorIngestionService,
   ServiceHealth,
   AuditService,
-  ObservabilityService
+  ObservabilityService,
+  WorkspaceMembership,
+  WorkspaceService
 } from "./types.js";
 
 function createId(prefix: string): string {
@@ -60,6 +65,46 @@ async function findWorkspaceForUser(userId: string): Promise<string | null> {
   });
 
   return membership?.workspaceId ?? null;
+}
+
+async function listWorkspaceMembershipsForUser(userId: string): Promise<WorkspaceMembership[]> {
+  const db = getDb();
+  const memberships = await db
+    .select({
+      id: schema.workspaces.id,
+      name: schema.workspaces.name,
+      slug: schema.workspaces.slug,
+      role: schema.workspaceMemberships.role,
+      createdAt: schema.workspaces.createdAt,
+      updatedAt: schema.workspaces.updatedAt
+    })
+    .from(schema.workspaceMemberships)
+    .innerJoin(schema.workspaces, eq(schema.workspaceMemberships.workspaceId, schema.workspaces.id))
+    .where(eq(schema.workspaceMemberships.userId, userId));
+
+  return memberships.map((membership: (typeof memberships)[number]) => ({
+    id: membership.id,
+    name: membership.name,
+    slug: membership.slug,
+    role: membership.role,
+    createdAt: membership.createdAt.toISOString(),
+    updatedAt: membership.updatedAt.toISOString()
+  }));
+}
+
+async function buildAuthUser(user: {
+  id: string;
+  email: string;
+  name: string | null;
+}): Promise<AuthUser> {
+  const workspaces = await listWorkspaceMembershipsForUser(user.id);
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? null,
+    roles: [...new Set(workspaces.map((workspace) => workspace.role))],
+    workspaces
+  };
 }
 
 export class DrizzleProvisioningCodeService implements ProvisioningCodeService {
@@ -112,6 +157,134 @@ export class DrizzleProvisioningCodeService implements ProvisioningCodeService {
     return {
       workspaceId: match.workspaceId,
       userId: match.userId
+    };
+  }
+}
+
+export class DrizzleAuthService implements AuthService, WorkspaceService {
+  async register(input: {
+    email: string;
+    password: string;
+    name?: string;
+    workspaceName?: string;
+  }): Promise<AuthSession> {
+    const db = getDb();
+    const existing = await db.query.users.findFirst({
+      where: eq(schema.users.email, input.email)
+    });
+
+    if (existing) {
+      throw new Error("EMAIL_ALREADY_EXISTS");
+    }
+
+    const userId = createId("user");
+    const workspaceId = createId("ws");
+    const workspaceName = input.workspaceName ?? `${input.name ?? "Kori"} Workspace`;
+    const workspaceSlug = workspaceName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 120);
+
+    await db.insert(schema.users).values({
+      id: userId,
+      email: input.email,
+      name: input.name ?? null,
+      passwordHash: hashPassword(input.password)
+    });
+
+    await db.insert(schema.workspaces).values({
+      id: workspaceId,
+      name: workspaceName,
+      slug: workspaceSlug
+    });
+
+    await db.insert(schema.workspaceMemberships).values({
+      id: createId("wm"),
+      userId,
+      workspaceId,
+      role: "workspace_admin"
+    });
+
+    await db.insert(schema.quotas).values({
+      id: createId("quota"),
+      workspaceId,
+      storageMb: 1024,
+      deviceLimit: 10,
+      monthlyAiTokens: 0
+    });
+
+    const user = await buildAuthUser({
+      id: userId,
+      email: input.email,
+      name: input.name ?? null
+    });
+
+    return this.createSession(user);
+  }
+
+  async login(input: { email: string; password: string }): Promise<AuthSession | null> {
+    const db = getDb();
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.email, input.email)
+    });
+
+    if (!user || !user.passwordHash || !verifyPassword(input.password, user.passwordHash)) {
+      return null;
+    }
+
+    return this.createSession(await buildAuthUser(user));
+  }
+
+  async getSession(token: string): Promise<AuthSession | null> {
+    const db = getDb();
+    const session = await db.query.sessions.findFirst({
+      where: and(eq(schema.sessions.tokenHash, sha256(token)), gt(schema.sessions.expiresAt, new Date()))
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, session.userId)
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      sessionToken: token,
+      expiresAt: session.expiresAt.toISOString(),
+      user: await buildAuthUser(user)
+    };
+  }
+
+  async logout(token: string): Promise<void> {
+    const db = getDb();
+    await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, sha256(token)));
+  }
+
+  async listForUser(userId: string): Promise<WorkspaceMembership[]> {
+    return listWorkspaceMembershipsForUser(userId);
+  }
+
+  private async createSession(user: AuthUser): Promise<AuthSession> {
+    const db = getDb();
+    const sessionToken = generateOpaqueToken();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await db.insert(schema.sessions).values({
+      id: createId("sess"),
+      tokenHash: sha256(sessionToken),
+      expiresAt,
+      userId: user.id
+    });
+
+    return {
+      sessionToken,
+      expiresAt: expiresAt.toISOString(),
+      user
     };
   }
 }

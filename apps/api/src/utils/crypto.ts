@@ -1,4 +1,11 @@
-import { createCipheriv, createHash, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createHash,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual
+} from "node:crypto";
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -41,4 +48,20 @@ export function decryptString(payload: string, secret: string): string {
   decipher.setAuthTag(authTag);
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("base64url");
+  const derived = scryptSync(password, salt, 64).toString("base64url");
+  return `${salt}:${derived}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const derived = scryptSync(password, salt, 64).toString("base64url");
+  return safeTokenCompare(derived, hash);
 }

@@ -32,6 +32,44 @@ export const workspaceRoleSchema = z.enum([
 
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 
+export const workspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  role: workspaceRoleSchema,
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional()
+});
+export type Workspace = z.infer<typeof workspaceSchema>;
+
+export const authUserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string().nullable(),
+  roles: z.array(workspaceRoleSchema),
+  workspaces: z.array(workspaceSchema)
+});
+export type AuthUser = z.infer<typeof authUserSchema>;
+
+export const authRegisterRequestSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(10).max(128),
+  name: z.string().min(1).max(120).optional(),
+  workspaceName: z.string().min(1).max(160).optional()
+});
+
+export const authLoginRequestSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1).max(128)
+});
+
+export const authSessionResponseSchema = z.object({
+  sessionToken: z.string(),
+  expiresAt: z.string().datetime(),
+  user: authUserSchema
+});
+export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
+
 export const deviceConfigSchema = z.object({
   telemetryIntervalSec: z.number().int().positive().default(2),
   thresholds: z.object({

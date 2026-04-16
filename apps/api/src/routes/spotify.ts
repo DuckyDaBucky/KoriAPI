@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { spotifyConnectionStatusSchema, spotifyPresenceSchema } from "@kori/shared";
 import { decodeSpotifyState } from "../services/spotify.js";
-import { requireAdmin } from "../utils/admin-auth.js";
+import { requireAdminSession } from "../utils/admin-auth.js";
 
 function getUserIdFromRequest(request: {
   query?: Record<string, unknown> | undefined;
@@ -18,7 +18,8 @@ function getUserIdFromRequest(request: {
 
 const spotifyRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/integrations/spotify/connect", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -79,7 +80,8 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/v1/integrations/spotify/status", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -97,7 +99,8 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/v1/integrations/spotify/presence", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -123,7 +126,8 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/v1/integrations/spotify/disconnect", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -144,7 +148,7 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
     await app.services.auditService.record({
       action: "spotify.disconnected",
       actorType: "admin",
-      actorId: "admin",
+      actorId: adminSession.actorId,
       workspaceId: null,
       userId,
       resourceType: "spotify_connection",

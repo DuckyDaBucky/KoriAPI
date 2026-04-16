@@ -1,6 +1,9 @@
 import { deviceConfigSchema } from "@kori/shared";
 import { evaluateRules } from "./rules.js";
 import type {
+  AuthService,
+  AuthSession,
+  AuthUser,
   AuthenticatedDevice,
   BootstrapResult,
   BootstrapService,
@@ -17,9 +20,11 @@ import type {
   SensorIngestionService,
   ServiceHealth,
   SpotifyConnectionStatus,
-  SpotifyService
+  SpotifyService,
+  WorkspaceMembership,
+  WorkspaceService
 } from "./types.js";
-import { generateOpaqueToken } from "../utils/crypto.js";
+import { generateOpaqueToken, hashPassword, verifyPassword } from "../utils/crypto.js";
 
 type DeviceEntry = DeviceRecord & {
   token: string;
@@ -33,6 +38,13 @@ type ProvisioningEntry = {
   expiresAt: string;
   label: string | null;
   consumed: boolean;
+};
+
+type MemoryUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  passwordHash: string;
 };
 
 export class MemoryBootstrapService
@@ -202,6 +214,127 @@ export class MemoryBootstrapService
     return {
       workspaceId: match.workspaceId,
       userId: match.userId
+    };
+  }
+}
+
+export class MemoryAuthService implements AuthService, WorkspaceService {
+  private readonly users = new Map<string, MemoryUser>();
+  private readonly usersByEmail = new Map<string, MemoryUser>();
+  private readonly sessions = new Map<string, { userId: string; expiresAt: string }>();
+  private readonly memberships = new Map<string, WorkspaceMembership[]>();
+
+  constructor() {
+    const user: MemoryUser = {
+      id: "user_dev",
+      email: "owner@example.com",
+      name: "Kori Owner",
+      passwordHash: hashPassword("ChangeMe123!")
+    };
+    this.users.set(user.id, user);
+    this.usersByEmail.set(user.email, user);
+    this.memberships.set(user.id, [
+      {
+        id: "ws_dev",
+        name: "Kori Default Workspace",
+        slug: "kori-default-workspace",
+        role: "platform_admin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+  }
+
+  async register(input: {
+    email: string;
+    password: string;
+    name?: string;
+    workspaceName?: string;
+  }): Promise<AuthSession> {
+    if (this.usersByEmail.has(input.email)) {
+      throw new Error("EMAIL_ALREADY_EXISTS");
+    }
+
+    const user: MemoryUser = {
+      id: `user_${this.users.size + 1}`,
+      email: input.email,
+      name: input.name ?? null,
+      passwordHash: hashPassword(input.password)
+    };
+    this.users.set(user.id, user);
+    this.usersByEmail.set(user.email, user);
+    this.memberships.set(user.id, [
+      {
+        id: `ws_${this.users.size}`,
+        name: input.workspaceName ?? `${input.name ?? "Kori"} Workspace`,
+        slug: `workspace-${this.users.size}`,
+        role: "workspace_admin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+
+    return this.createSession(user);
+  }
+
+  async login(input: { email: string; password: string }): Promise<AuthSession | null> {
+    const user = this.usersByEmail.get(input.email);
+    if (!user || !verifyPassword(input.password, user.passwordHash)) {
+      return null;
+    }
+
+    return this.createSession(user);
+  }
+
+  async getSession(token: string): Promise<AuthSession | null> {
+    const session = this.sessions.get(token);
+    if (!session || Date.parse(session.expiresAt) < Date.now()) {
+      return null;
+    }
+
+    const user = this.users.get(session.userId);
+    if (!user) {
+      return null;
+    }
+
+    return {
+      sessionToken: token,
+      expiresAt: session.expiresAt,
+      user: this.toAuthUser(user)
+    };
+  }
+
+  async logout(token: string): Promise<void> {
+    this.sessions.delete(token);
+  }
+
+  async listForUser(userId: string): Promise<WorkspaceMembership[]> {
+    return this.memberships.get(userId) ?? [];
+  }
+
+  private createSession(user: MemoryUser): AuthSession {
+    const sessionToken = generateOpaqueToken();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    this.sessions.set(sessionToken, {
+      userId: user.id,
+      expiresAt
+    });
+
+    return {
+      sessionToken,
+      expiresAt,
+      user: this.toAuthUser(user)
+    };
+  }
+
+  private toAuthUser(user: MemoryUser): AuthUser {
+    const workspaces = this.memberships.get(user.id) ?? [];
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: [...new Set(workspaces.map((workspace) => workspace.role))],
+      workspaces
     };
   }
 }

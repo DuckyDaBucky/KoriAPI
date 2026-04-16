@@ -4,13 +4,16 @@ import type { AppEnv } from "./config/env.js";
 import { getEnv } from "./config/env.js";
 import servicesPlugin, { type AppServices } from "./plugins/services.js";
 import healthRoute from "./routes/health.js";
+import authRoutes from "./routes/auth.js";
 import deviceRoutes from "./routes/device.js";
+import workspaceRoutes from "./routes/workspaces.js";
 import wsRoutes from "./routes/ws.js";
 import adminRoutes from "./routes/admin.js";
 import spotifyRoutes from "./routes/spotify.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import { createBetterAuthStub, registerBetterAuthStub } from "./services/better-auth.js";
 import {
+  MemoryAuthService,
   MemoryBootstrapService,
   MemoryHealthService,
   MemoryLiveStateService,
@@ -21,6 +24,7 @@ import {
 import { MemoryAuditService, MemoryObservabilityService } from "./services/observability.js";
 import { RedisLiveStateService } from "./services/redis.js";
 import {
+  DrizzleAuthService,
   DrizzleAuditService,
   DrizzleDeviceService,
   DrizzleHealthService,
@@ -50,11 +54,14 @@ export interface BuildServerOptions {
 export function createDefaultServices(env: AppEnv): AppServices {
   const bootstrap = new MemoryBootstrapService();
   const observabilityService = new MemoryObservabilityService();
+  const authService = new MemoryAuthService();
 
   return {
+    authService,
     bootstrapService: bootstrap,
     deviceAuthService: bootstrap,
     deviceRegistryService: bootstrap,
+    workspaceService: authService,
     provisioningCodeService: bootstrap,
     healthService: new MemoryHealthService(),
     liveStateService: new MemoryLiveStateService(),
@@ -91,10 +98,13 @@ export async function buildServer(options: BuildServerOptions = {}) {
     const provisioningService = new DrizzleProvisioningCodeService();
     const observabilityService = new MemoryObservabilityService();
     const deviceService = new DrizzleDeviceService(provisioningService);
+    const authService = new DrizzleAuthService();
     baseServices = {
+      authService,
       bootstrapService: deviceService,
       deviceAuthService: deviceService,
       deviceRegistryService: deviceService,
+      workspaceService: authService,
       provisioningCodeService: provisioningService,
       healthService: new DrizzleHealthService(redis),
       liveStateService: new RedisLiveStateService(redis),
@@ -149,6 +159,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
   }
   await registerBetterAuthStub(app, createBetterAuthStub(betterAuthOptions));
   await app.register(healthRoute);
+  await app.register(authRoutes);
+  await app.register(workspaceRoutes);
   await app.register(deviceRoutes);
   await app.register(adminRoutes);
   await app.register(spotifyRoutes);

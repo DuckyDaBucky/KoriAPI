@@ -6,11 +6,12 @@ import {
   provisioningCodeRequestSchema,
   provisioningCodeResponseSchema
 } from "@kori/shared";
-import { requireAdmin } from "../utils/admin-auth.js";
+import { requireAdminSession } from "../utils/admin-auth.js";
 
 const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/admin/overview", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -41,7 +42,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/v1/admin/logs", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -51,7 +53,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/v1/admin/audit", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -60,7 +63,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/v1/admin/devices", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -88,7 +92,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/v1/admin/provisioning-codes", async (request, reply) => {
-    if (!requireAdmin(request, reply)) {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
       return;
     }
 
@@ -101,8 +106,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
     });
     await app.services.auditService.record({
       action: "provisioning_code.created",
-      actorType: "admin",
-      actorId: "admin",
+      actorType: adminSession.role === "platform_admin" || adminSession.role === "workspace_admin" ? "admin" : "user",
+      actorId: adminSession.actorId,
       workspaceId: body.workspaceId,
       userId: body.userId,
       resourceType: "device_provisioning_code",

@@ -142,6 +142,49 @@ test("admin overview requires admin key", async () => {
   await app.close();
 });
 
+test("auth login returns a session and workspaces list", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+
+  assert.equal(login.statusCode, 200);
+  const session = login.json();
+  assert.ok(typeof session.sessionToken === "string");
+  assert.equal(session.user.workspaces[0].role, "platform_admin");
+
+  const workspaces = await app.inject({
+    method: "GET",
+    url: "/v1/workspaces",
+    headers: {
+      "x-kori-session": session.sessionToken
+    }
+  });
+
+  assert.equal(workspaces.statusCode, 200);
+  assert.equal(workspaces.json()[0].slug, "kori-default-workspace");
+
+  const adminOverview = await app.inject({
+    method: "GET",
+    url: "/v1/admin/overview",
+    headers: {
+      "x-kori-session": session.sessionToken
+    }
+  });
+
+  assert.equal(adminOverview.statusCode, 200);
+
+  await app.close();
+});
+
 test("device config and rotate token routes require device auth", async () => {
   const app = await buildServer({
     env: baseEnv
