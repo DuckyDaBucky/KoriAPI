@@ -1,0 +1,6 @@
+{
+  "name": "@kori/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency developer dashboard scaffold for KoriAPI"
+}

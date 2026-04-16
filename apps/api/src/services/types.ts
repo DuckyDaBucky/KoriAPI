@@ -1,4 +1,12 @@
-import type { DeviceConfig, NotificationSeverity } from "@kori/shared";
+import type {
+  AuditEvent,
+  DeviceConfig,
+  DeviceLiveState,
+  DeveloperLogEvent,
+  NotificationSeverity,
+  SpotifyPresence,
+  WorkspaceRole
+} from "@kori/shared";
 
 export type ServiceHealth = "up" | "down";
 
@@ -15,14 +23,29 @@ export interface DeviceRecord {
   id: string;
   hardwareId: string;
   userId: string;
+  workspaceId: string | null;
   name: string;
   firmwareVersion: string;
+  protocolVersion: string;
   config: DeviceConfig;
+}
+
+export interface DeviceRegistryRecord {
+  id: string;
+  hardwareId: string;
+  userId: string;
+  workspaceId: string | null;
+  name: string;
+  firmwareVersion: string;
+  protocolVersion: string;
+  status: "PENDING" | "ACTIVE" | "OFFLINE";
+  lastSeenAt: string | null;
 }
 
 export interface AuthenticatedDevice {
   id: string;
   userId: string;
+  workspaceId: string | null;
   config: DeviceConfig;
 }
 
@@ -32,12 +55,14 @@ export interface BootstrapResult {
   wsUrl: string;
   config: DeviceConfig;
   serverTime: number;
+  protocolVersion: string;
 }
 
 export interface BootstrapService {
   bootstrap(input: {
     hardwareId: string;
-    userApiKey: string;
+    userApiKey?: string;
+    provisioningCode?: string;
     deviceName: string;
     firmwareVersion: string;
     wsUrl: string;
@@ -46,6 +71,12 @@ export interface BootstrapService {
 
 export interface DeviceAuthService {
   authenticateToken(token: string): Promise<AuthenticatedDevice | null>;
+}
+
+export interface DeviceRegistryService {
+  listDevices(): Promise<DeviceRegistryRecord[]>;
+  rotateToken(input: { deviceId: string }): Promise<{ token: string; expiresAt: string; rotatedAt: string }>;
+  getDeviceConfig(deviceId: string): Promise<DeviceConfig>;
 }
 
 export interface HealthService {
@@ -101,4 +132,58 @@ export interface NotificationEventService {
     notificationId: string;
     action: "shown" | "acknowledged" | "dismissed";
   }): Promise<void>;
+}
+
+export interface ProvisioningCodeService {
+  createCode(input: {
+    workspaceId: string;
+    userId: string;
+    expiresInSec: number;
+    label?: string;
+  }): Promise<{ code: string; workspaceId: string; userId: string; expiresAt: string; label: string | null }>;
+  consumeCode(code: string): Promise<{ workspaceId: string; userId: string } | null>;
+}
+
+export interface AuditService {
+  record(event: Omit<AuditEvent, "id" | "createdAt"> & { createdAt?: string }): Promise<AuditEvent>;
+  listRecent(limit?: number): Promise<AuditEvent[]>;
+}
+
+export interface ObservabilityService {
+  log(event: Omit<DeveloperLogEvent, "id" | "createdAt"> & { createdAt?: string }): Promise<DeveloperLogEvent>;
+  listLogs(limit?: number): Promise<DeveloperLogEvent[]>;
+  publish(event: AdminStreamEvent): Promise<void>;
+  setDeviceState(state: DeviceLiveState): Promise<void>;
+  removeDeviceState(deviceId: string): Promise<void>;
+  listDeviceStates(): Promise<DeviceLiveState[]>;
+  setSpotifyPresence(presence: SpotifyPresence): Promise<void>;
+  listSpotifyPresence(): Promise<SpotifyPresence[]>;
+  subscribe(listener: (event: AdminStreamEvent) => void): () => void;
+}
+
+export interface SpotifyConnectionStatus {
+  connected: boolean;
+  userId: string;
+  spotifyUserId: string | null;
+  scopes: string[];
+  lastSyncedAt: string | null;
+  presence: SpotifyPresence | null;
+}
+
+export interface SpotifyService {
+  getAuthorizationUrl(userId: string): Promise<string>;
+  handleCallback(input: { userId: string; code: string }): Promise<SpotifyConnectionStatus>;
+  disconnect(userId: string): Promise<void>;
+  getStatus(userId: string): Promise<SpotifyConnectionStatus>;
+  refreshPresence(userId: string): Promise<SpotifyPresence | null>;
+}
+
+export interface AdminSession {
+  role: Extract<WorkspaceRole, "platform_admin" | "workspace_admin">;
+  actorId: string;
+}
+
+export interface AdminStreamEvent {
+  type: "admin:log" | "admin:device_state" | "admin:audit" | "admin:spotify_presence" | "admin:overview";
+  payload: DeveloperLogEvent | DeviceLiveState | AuditEvent | SpotifyPresence | Record<string, unknown>;
 }

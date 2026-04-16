@@ -1,21 +1,31 @@
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  AuditService,
   BootstrapService,
   DeviceAuthService,
+  DeviceRegistryService,
   HealthService,
   LiveStateService,
   NotificationEventService,
-  SensorIngestionService
+  ObservabilityService,
+  ProvisioningCodeService,
+  SensorIngestionService,
+  SpotifyService
 } from "../services/types.js";
 
 export interface AppServices {
   bootstrapService: BootstrapService;
   deviceAuthService: DeviceAuthService;
+  deviceRegistryService: DeviceRegistryService;
+  provisioningCodeService: ProvisioningCodeService;
   healthService: HealthService;
   liveStateService: LiveStateService;
   sensorIngestionService: SensorIngestionService;
   notificationEventService: NotificationEventService;
+  auditService: AuditService;
+  observabilityService: ObservabilityService;
+  spotifyService: SpotifyService;
 }
 
 declare module "fastify" {

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kori Developer Dashboard</title>
+    <link rel="stylesheet" href="/admin/dashboard/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">KoriAPI</p>
+          <h1>Developer Dashboard</h1>
+          <p class="lede">
+            Live operational console for devices, telemetry, auth activity, Spotify presence, and API iteration.
+          </p>
+        </div>
+        <form id="auth-form" class="token-card">
+          <label for="admin-token">Admin token</label>
+          <input id="admin-token" name="admin-token" type="password" placeholder="Paste ADMIN_API_KEY" />
+          <button type="submit">Connect</button>
+        </form>
+      </header>
+
+      <section class="grid summary-grid">
+        <article class="panel">
+          <h2>Overview</h2>
+          <pre id="overview-output">Connect to load overview.</pre>
+        </article>
+        <article class="panel">
+          <h2>Provisioning</h2>
+          <form id="provision-form" class="stacked">
+            <input name="workspaceId" placeholder="workspaceId" value="ws_dev" />
+            <input name="userId" placeholder="userId" value="user_dev" />
+            <input name="expiresInSec" placeholder="expiresInSec" value="600" />
+            <input name="label" placeholder="label" value="dashboard-issued" />
+            <button type="submit">Create provisioning code</button>
+          </form>
+          <pre id="provision-output"></pre>
+        </article>
+      </section>
+
+      <section class="grid two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Devices</h2>
+            <button data-refresh="devices">Refresh</button>
+          </div>
+          <pre id="devices-output">No data yet.</pre>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Spotify Presence</h2>
+            <div class="inline-form">
+              <input id="spotify-user-id" value="user_dev" placeholder="userId" />
+              <button id="spotify-status-button" type="button">Status</button>
+              <button id="spotify-presence-button" type="button">Refresh Presence</button>
+            </div>
+          </div>
+          <pre id="spotify-output">No data yet.</pre>
+        </article>
+      </section>
+
+      <section class="grid two-col">
+        <article class="panel log-panel">
+          <div class="panel-head">
+            <h2>Live Logs</h2>
+            <button data-refresh="logs">Refresh</button>
+          </div>
+          <pre id="logs-output">No log events yet.</pre>
+        </article>
+        <article class="panel log-panel">
+          <div class="panel-head">
+            <h2>Audit Trail</h2>
+            <button data-refresh="audit">Refresh</button>
+          </div>
+          <pre id="audit-output">No audit events yet.</pre>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>API Quick Test</h2>
+          <span class="muted">Admin-authenticated JSON fetcher for iteration</span>
+        </div>
+        <form id="request-form" class="stacked">
+          <input name="path" value="/v1/admin/overview" />
+          <select name="method">
+            <option>GET</option>
+            <option>POST</option>
+          </select>
+          <textarea name="body" rows="6" placeholder='{"workspaceId":"ws_dev","userId":"user_dev","expiresInSec":600}'></textarea>
+          <button type="submit">Send request</button>
+        </form>
+        <pre id="request-output"></pre>
+      </section>
+    </main>
+
+    <script src="/admin/dashboard/app.js" type="module"></script>
+  </body>
+  </html>

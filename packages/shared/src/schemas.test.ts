@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   bootstrapRequestSchema,
   inboundEnvelopeSchema,
+  provisioningCodeRequestSchema,
   wsEventTypes
 } from "./index.js";
 
@@ -15,6 +16,17 @@ test("bootstrap request schema accepts valid bootstrap input", () => {
   });
 
   assert.equal(parsed.deviceName, "Kori-CYD");
+});
+
+test("provisioning code request schema accepts valid input", () => {
+  const parsed = provisioningCodeRequestSchema.parse({
+    workspaceId: "ws_dev",
+    userId: "user_dev",
+    expiresInSec: 600,
+    label: "lab-device"
+  });
+
+  assert.equal(parsed.workspaceId, "ws_dev");
 });
 
 test("inbound sensor envelope parses device telemetry", () => {

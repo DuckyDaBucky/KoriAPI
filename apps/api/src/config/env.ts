@@ -1,7 +1,18 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { config as loadDotEnv } from "dotenv";
 import { z } from "zod";
 
-loadDotEnv();
+const envPaths = [
+  join(process.cwd(), ".env"),
+  join(process.cwd(), "apps", "api", ".env")
+];
+
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    loadDotEnv({ path: envPath, override: false });
+  }
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -11,7 +22,13 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   PUBLIC_WS_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().optional(),
-  BETTER_AUTH_BASE_URL: z.string().url().optional()
+  BETTER_AUTH_BASE_URL: z.string().url().optional(),
+  APP_ENCRYPTION_KEY: z.string().min(16).default("kori-development-encryption-key"),
+  ADMIN_API_KEY: z.string().min(16).default("kori-development-admin-key"),
+  SPOTIFY_CLIENT_ID: z.string().optional(),
+  SPOTIFY_CLIENT_SECRET: z.string().optional(),
+  SPOTIFY_REDIRECT_URI: z.string().url().optional(),
+  SPOTIFY_SCOPES: z.string().default("user-read-currently-playing user-read-playback-state")
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

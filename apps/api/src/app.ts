@@ -6,22 +6,30 @@ import servicesPlugin, { type AppServices } from "./plugins/services.js";
 import healthRoute from "./routes/health.js";
 import deviceRoutes from "./routes/device.js";
 import wsRoutes from "./routes/ws.js";
+import adminRoutes from "./routes/admin.js";
+import spotifyRoutes from "./routes/spotify.js";
+import dashboardRoutes from "./routes/dashboard.js";
 import { createBetterAuthStub, registerBetterAuthStub } from "./services/better-auth.js";
 import {
   MemoryBootstrapService,
   MemoryHealthService,
   MemoryLiveStateService,
   MemoryNotificationEventService,
-  MemorySensorIngestionService
+  MemorySensorIngestionService,
+  MemorySpotifyService
 } from "./services/memory.js";
+import { MemoryAuditService, MemoryObservabilityService } from "./services/observability.js";
 import { RedisLiveStateService } from "./services/redis.js";
 import {
+  DrizzleAuditService,
   DrizzleDeviceService,
   DrizzleHealthService,
   DrizzleNotificationEventService,
+  DrizzleProvisioningCodeService,
   DrizzleSensorIngestionService
 } from "./services/drizzle.js";
 import type { RedisClient } from "./services/types.js";
+import { SpotifyHttpService } from "./services/spotify.js";
 
 const RedisConstructor = (await import("ioredis")).default as unknown as new (
   url: string,
@@ -39,16 +47,22 @@ export interface BuildServerOptions {
   services?: Partial<AppServices>;
 }
 
-export function createDefaultServices(): AppServices {
+export function createDefaultServices(env: AppEnv): AppServices {
   const bootstrap = new MemoryBootstrapService();
+  const observabilityService = new MemoryObservabilityService();
 
   return {
     bootstrapService: bootstrap,
     deviceAuthService: bootstrap,
+    deviceRegistryService: bootstrap,
+    provisioningCodeService: bootstrap,
     healthService: new MemoryHealthService(),
     liveStateService: new MemoryLiveStateService(),
     sensorIngestionService: new MemorySensorIngestionService(),
-    notificationEventService: new MemoryNotificationEventService()
+    notificationEventService: new MemoryNotificationEventService(),
+    auditService: new MemoryAuditService(observabilityService),
+    observabilityService,
+    spotifyService: new MemorySpotifyService()
   };
 }
 
@@ -71,17 +85,24 @@ export async function buildServer(options: BuildServerOptions = {}) {
 
   let baseServices: AppServices;
   if (env.NODE_ENV === "test") {
-    baseServices = createDefaultServices();
+    baseServices = createDefaultServices(env);
   } else {
     const redis = redisForClose as RedisClient;
-    const deviceService = new DrizzleDeviceService();
+    const provisioningService = new DrizzleProvisioningCodeService();
+    const observabilityService = new MemoryObservabilityService();
+    const deviceService = new DrizzleDeviceService(provisioningService);
     baseServices = {
       bootstrapService: deviceService,
       deviceAuthService: deviceService,
+      deviceRegistryService: deviceService,
+      provisioningCodeService: provisioningService,
       healthService: new DrizzleHealthService(redis),
       liveStateService: new RedisLiveStateService(redis),
       sensorIngestionService: new DrizzleSensorIngestionService(),
-      notificationEventService: new DrizzleNotificationEventService()
+      notificationEventService: new DrizzleNotificationEventService(),
+      auditService: new DrizzleAuditService(observabilityService),
+      observabilityService,
+      spotifyService: new SpotifyHttpService(env, observabilityService)
     };
   }
 
@@ -100,6 +121,25 @@ export async function buildServer(options: BuildServerOptions = {}) {
   });
 
   await app.register(servicesPlugin, { services });
+
+  app.addHook("onResponse", async (request, reply) => {
+    await app.services.observabilityService.log({
+      level: reply.statusCode >= 500 ? "error" : reply.statusCode >= 400 ? "warn" : "info",
+      message: `${request.method} ${request.routeOptions.url}`,
+      route: request.routeOptions.url ?? request.url.split("?")[0] ?? null,
+      method: request.method,
+      requestId: request.id,
+      statusCode: reply.statusCode,
+      workspaceId: null,
+      userId: null,
+      deviceId: null,
+      integration: null,
+      metadata: {
+        remoteAddress: request.ip
+      }
+    });
+  });
+
   const betterAuthOptions: { secret?: string | undefined; baseUrl?: string | undefined } = {};
   if (env.BETTER_AUTH_SECRET) {
     betterAuthOptions.secret = env.BETTER_AUTH_SECRET;
@@ -107,12 +147,12 @@ export async function buildServer(options: BuildServerOptions = {}) {
   if (env.BETTER_AUTH_BASE_URL) {
     betterAuthOptions.baseUrl = env.BETTER_AUTH_BASE_URL;
   }
-  await registerBetterAuthStub(
-    app,
-    createBetterAuthStub(betterAuthOptions)
-  );
+  await registerBetterAuthStub(app, createBetterAuthStub(betterAuthOptions));
   await app.register(healthRoute);
   await app.register(deviceRoutes);
+  await app.register(adminRoutes);
+  await app.register(spotifyRoutes);
+  await app.register(dashboardRoutes);
   await app.register(wsRoutes);
 
   return app;

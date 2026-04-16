@@ -13,6 +13,10 @@ function nowUnix(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
 function send(socket: WebSocket, type: string, payload: Record<string, unknown>): void {
   socket.send(
     JSON.stringify({
@@ -74,6 +78,36 @@ function toSensorInput(sensors: {
   };
 }
 
+async function publishDeviceState(
+  app: FastifyInstance,
+  device: AuthenticatedDevice,
+  state: {
+    connected: boolean;
+    connectedAt?: string | null;
+    lastSeenAt?: string | null;
+    lastServerTime?: number | null;
+    sensors?: Record<string, unknown> | null;
+    health?: Record<string, unknown> | null;
+    activeRuleTypes?: string[];
+  }
+): Promise<void> {
+  const registry = await app.services.deviceRegistryService.listDevices();
+  const details = registry.find((entry) => entry.id === device.id);
+  await app.services.observabilityService.setDeviceState({
+    deviceId: device.id,
+    hardwareId: details?.hardwareId ?? null,
+    name: details?.name ?? null,
+    firmwareVersion: details?.firmwareVersion ?? null,
+    connected: state.connected,
+    connectedAt: state.connectedAt ?? null,
+    lastSeenAt: state.lastSeenAt ?? null,
+    lastServerTime: state.lastServerTime ?? null,
+    sensors: state.sensors ?? null,
+    health: state.health ?? null,
+    activeRuleTypes: state.activeRuleTypes ?? []
+  });
+}
+
 async function authenticateSession(
   app: FastifyInstance,
   session: DeviceSession,
@@ -96,7 +130,13 @@ async function authenticateSession(
 
   session.device = device;
   await app.services.liveStateService.setDeviceSession(device.id, {
-    connectedAt: new Date().toISOString()
+    connectedAt: nowIso()
+  });
+  await publishDeviceState(app, device, {
+    connected: true,
+    connectedAt: nowIso(),
+    lastSeenAt: nowIso(),
+    lastServerTime: nowUnix()
   });
 
   send(session.socket, wsEventTypes.sessionReady, {
@@ -138,10 +178,33 @@ export async function attachDeviceSocket(
         );
 
         if (!device) {
+          await app.services.observabilityService.log({
+            level: "warn",
+            message: "Device WebSocket authentication failed",
+            route: "/v1/ws/device",
+            method: "GET",
+            requestId: null,
+            statusCode: 401,
+            workspaceId: null,
+            userId: null,
+            deviceId: parsed.payload.deviceId ?? null,
+            integration: null,
+            metadata: {}
+          });
           socket.close(4001, "unauthorized");
           return;
         }
 
+        await app.services.auditService.record({
+          action: "device.socket_connected",
+          actorType: "device",
+          actorId: device.id,
+          workspaceId: device.workspaceId,
+          userId: device.userId,
+          resourceType: "device",
+          resourceId: device.id,
+          metadata: {}
+        });
         return;
       }
 
@@ -176,6 +239,15 @@ export async function attachDeviceSocket(
           health: parsed.payload.health,
           activeRuleTypes
         });
+        await publishDeviceState(app, device, {
+          connected: true,
+          connectedAt: nowIso(),
+          lastSeenAt: nowIso(),
+          lastServerTime: result.receivedAt,
+          sensors: parsed.payload.sensors,
+          health: parsed.payload.health,
+          activeRuleTypes
+        });
 
         for (const notification of result.notifications) {
           if (previousRules.has(notification.type)) {
@@ -200,6 +272,16 @@ export async function attachDeviceSocket(
           notificationId: parsed.payload.notificationId,
           action: parsed.payload.action
         });
+        await app.services.auditService.record({
+          action: `device.notification_${parsed.payload.action}`,
+          actorType: "device",
+          actorId: device.id,
+          workspaceId: device.workspaceId,
+          userId: device.userId,
+          resourceType: "notification",
+          resourceId: parsed.payload.notificationId,
+          metadata: {}
+        });
         return;
       }
 
@@ -214,8 +296,31 @@ export async function attachDeviceSocket(
           receivedAt: nowUnix(),
           activeRuleTypes: activeRuleListFromState(previousState)
         });
+        await publishDeviceState(app, device, {
+          connected: true,
+          connectedAt: nowIso(),
+          lastSeenAt: nowIso(),
+          lastServerTime: nowUnix(),
+          health: parsed.payload,
+          activeRuleTypes: activeRuleListFromState(previousState)
+        });
       }
     } catch (error) {
+      await app.services.observabilityService.log({
+        level: "warn",
+        message: "Failed to process device WebSocket message",
+        route: "/v1/ws/device",
+        method: "GET",
+        requestId: null,
+        statusCode: 1003,
+        workspaceId: session.device?.workspaceId ?? null,
+        userId: session.device?.userId ?? null,
+        deviceId: session.device?.id ?? null,
+        integration: null,
+        metadata: {
+          error: error instanceof Error ? error.message : "unknown_error"
+        }
+      });
       app.log.warn({ error }, "failed to process device websocket message");
       socket.close(1003, "bad payload");
     }
@@ -224,6 +329,17 @@ export async function attachDeviceSocket(
   socket.on("close", async () => {
     if (session.device) {
       await app.services.liveStateService.removeDeviceSession(session.device.id);
+      await app.services.observabilityService.removeDeviceState(session.device.id);
+      await app.services.auditService.record({
+        action: "device.socket_disconnected",
+        actorType: "device",
+        actorId: session.device.id,
+        workspaceId: session.device.workspaceId,
+        userId: session.device.userId,
+        resourceType: "device",
+        resourceId: session.device.id,
+        metadata: {}
+      });
     }
   });
 }
