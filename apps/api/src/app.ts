@@ -5,6 +5,9 @@ import { getEnv } from "./config/env.js";
 import servicesPlugin, { type AppServices } from "./plugins/services.js";
 import healthRoute from "./routes/health.js";
 import authRoutes from "./routes/auth.js";
+import notesRoutes from "./routes/notes.js";
+import deadlinesRoutes from "./routes/deadlines.js";
+import recommendationsRoutes from "./routes/recommendations.js";
 import deviceRoutes from "./routes/device.js";
 import workspaceRoutes from "./routes/workspaces.js";
 import wsRoutes from "./routes/ws.js";
@@ -15,21 +18,29 @@ import { createBetterAuthStub, registerBetterAuthStub } from "./services/better-
 import {
   MemoryAuthService,
   MemoryBootstrapService,
+  MemoryDeadlinesService,
   MemoryHealthService,
   MemoryLiveStateService,
+  MemoryNotesService,
   MemoryNotificationEventService,
+  MemoryRecommendationsService,
   MemorySensorIngestionService,
-  MemorySpotifyService
+  MemorySpotifyService,
+  MemoryTelemetryService
 } from "./services/memory.js";
 import { MemoryAuditService, MemoryObservabilityService } from "./services/observability.js";
 import { RedisLiveStateService } from "./services/redis.js";
 import {
   DrizzleAuthService,
   DrizzleAuditService,
+  DrizzleDeadlinesService,
   DrizzleDeviceService,
   DrizzleHealthService,
+  DrizzleNotesService,
   DrizzleNotificationEventService,
   DrizzleProvisioningCodeService,
+  DrizzleRecommendationsService,
+  DrizzleTelemetryService,
   DrizzleSensorIngestionService
 } from "./services/drizzle.js";
 import type { RedisClient } from "./services/types.js";
@@ -55,21 +66,26 @@ export function createDefaultServices(env: AppEnv): AppServices {
   const bootstrap = new MemoryBootstrapService();
   const observabilityService = new MemoryObservabilityService();
   const authService = new MemoryAuthService();
+  const sensorIngestionService = new MemorySensorIngestionService();
 
   return {
     authService,
     bootstrapService: bootstrap,
+    deadlinesService: new MemoryDeadlinesService(),
     deviceAuthService: bootstrap,
     deviceRegistryService: bootstrap,
     workspaceService: authService,
     provisioningCodeService: bootstrap,
     healthService: new MemoryHealthService(),
     liveStateService: new MemoryLiveStateService(),
-    sensorIngestionService: new MemorySensorIngestionService(),
+    notesService: new MemoryNotesService(),
+    sensorIngestionService,
     notificationEventService: new MemoryNotificationEventService(),
     auditService: new MemoryAuditService(observabilityService),
     observabilityService,
-    spotifyService: new MemorySpotifyService()
+    recommendationsService: new MemoryRecommendationsService(),
+    spotifyService: new MemorySpotifyService(),
+    telemetryService: new MemoryTelemetryService(sensorIngestionService)
   };
 }
 
@@ -102,17 +118,21 @@ export async function buildServer(options: BuildServerOptions = {}) {
     baseServices = {
       authService,
       bootstrapService: deviceService,
+      deadlinesService: new DrizzleDeadlinesService(),
       deviceAuthService: deviceService,
       deviceRegistryService: deviceService,
       workspaceService: authService,
       provisioningCodeService: provisioningService,
       healthService: new DrizzleHealthService(redis),
       liveStateService: new RedisLiveStateService(redis),
+      notesService: new DrizzleNotesService(),
       sensorIngestionService: new DrizzleSensorIngestionService(),
       notificationEventService: new DrizzleNotificationEventService(),
       auditService: new DrizzleAuditService(observabilityService),
       observabilityService,
-      spotifyService: new SpotifyHttpService(env, observabilityService)
+      recommendationsService: new DrizzleRecommendationsService(),
+      spotifyService: new SpotifyHttpService(env, observabilityService),
+      telemetryService: new DrizzleTelemetryService()
     };
   }
 
@@ -161,6 +181,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(healthRoute);
   await app.register(authRoutes);
   await app.register(workspaceRoutes);
+  await app.register(notesRoutes);
+  await app.register(deadlinesRoutes);
+  await app.register(recommendationsRoutes);
   await app.register(deviceRoutes);
   await app.register(adminRoutes);
   await app.register(spotifyRoutes);

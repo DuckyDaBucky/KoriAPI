@@ -14,15 +14,19 @@ import type {
   HealthService,
   LiveStateService,
   NotificationEventService,
+  NotesService,
   ProvisioningCodeService,
+  RecommendationsService,
   SensorIngestionInput,
   SensorIngestionResult,
   SensorIngestionService,
   ServiceHealth,
   SpotifyConnectionStatus,
   SpotifyService,
+  TelemetryService,
   WorkspaceMembership,
-  WorkspaceService
+  WorkspaceService,
+  DeadlinesService
 } from "./types.js";
 import { generateOpaqueToken, hashPassword, verifyPassword } from "../utils/crypto.js";
 
@@ -45,6 +49,18 @@ type MemoryUser = {
   email: string;
   name: string | null;
   passwordHash: string;
+};
+
+type MemorySensorSample = {
+  deviceId: string;
+  receivedAt: string;
+  temperatureC: number | null;
+  humidityPct: number | null;
+  pressureHpa: number | null;
+  co2Ppm: number | null;
+  tvocPpb: number | null;
+  noisePct: number;
+  lightPct: number;
 };
 
 export class MemoryBootstrapService
@@ -371,9 +387,25 @@ export class MemoryLiveStateService implements LiveStateService {
 }
 
 export class MemorySensorIngestionService implements SensorIngestionService {
+  readonly samples: MemorySensorSample[] = [];
+
   async ingest(input: SensorIngestionInput): Promise<SensorIngestionResult> {
+    const receivedAt = Math.floor(Date.now() / 1000);
+    this.samples.unshift({
+      deviceId: input.device.id,
+      receivedAt: new Date(receivedAt * 1000).toISOString(),
+      temperatureC: input.sensors.temp ?? null,
+      humidityPct: input.sensors.humidity ?? null,
+      pressureHpa: input.sensors.pressure ?? null,
+      co2Ppm: input.sensors.co2 ?? null,
+      tvocPpb: input.sensors.tvoc ?? null,
+      noisePct: input.sensors.noise,
+      lightPct: input.sensors.light
+    });
+    this.samples.splice(1000);
+
     return {
-      receivedAt: Math.floor(Date.now() / 1000),
+      receivedAt,
       notifications: evaluateRules(input, input.device.config)
     };
   }
@@ -444,4 +476,191 @@ export class MemorySpotifyService implements SpotifyService {
     const status = await this.getStatus(userId);
     return status.presence;
   }
+}
+
+export class MemoryNotesService implements NotesService {
+  private readonly notes = new Map<string, Array<Awaited<ReturnType<NotesService["createNote"]>>>>();
+  private readonly revisions = new Map<string, Array<Awaited<ReturnType<NotesService["createRevision"]>>>>();
+
+  async listNotes(input: { userId: string }) {
+    return this.notes.get(input.userId) ?? [];
+  }
+
+  async createNote(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    type: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content: string;
+  }) {
+    const note = {
+      id: `note_${Date.now()}`,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      title: input.title,
+      type: input.type,
+      content: input.content,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as const;
+    const existing = this.notes.get(input.userId) ?? [];
+    this.notes.set(input.userId, [note, ...existing]);
+    this.revisions.set(note.id, [
+      {
+        id: `rev_${Date.now()}`,
+        noteId: note.id,
+        content: note.content,
+        userId: input.userId,
+        createdAt: note.createdAt
+      }
+    ]);
+    return note;
+  }
+
+  async listRevisions(noteId: string) {
+    return this.revisions.get(noteId) ?? [];
+  }
+
+  async createRevision(input: { noteId: string; userId: string; content: string }) {
+    const revision = {
+      id: `rev_${Date.now()}`,
+      noteId: input.noteId,
+      content: input.content,
+      userId: input.userId,
+      createdAt: new Date().toISOString()
+    };
+    const revisions = this.revisions.get(input.noteId) ?? [];
+    this.revisions.set(input.noteId, [revision, ...revisions]);
+
+    for (const [userId, notes] of this.notes.entries()) {
+      this.notes.set(
+        userId,
+        notes.map((note) =>
+          note.id === input.noteId
+            ? {
+                ...note,
+                content: input.content,
+                updatedAt: revision.createdAt
+              }
+            : note
+        )
+      );
+    }
+
+    return revision;
+  }
+}
+
+export class MemoryDeadlinesService implements DeadlinesService {
+  private readonly deadlines = new Map<string, Array<Awaited<ReturnType<DeadlinesService["createDeadline"]>>>>();
+
+  async listDeadlines(input: { userId: string }) {
+    return this.deadlines.get(input.userId) ?? [];
+  }
+
+  async createDeadline(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    dueAt: string;
+    metadata: Record<string, unknown>;
+  }) {
+    const deadline = {
+      id: `deadline_${Date.now()}`,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      title: input.title,
+      dueAt: input.dueAt,
+      status: "OPEN" as const,
+      metadata: input.metadata,
+      createdAt: new Date().toISOString()
+    };
+    const existing = this.deadlines.get(input.userId) ?? [];
+    this.deadlines.set(input.userId, [deadline, ...existing]);
+    return deadline;
+  }
+}
+
+export class MemoryRecommendationsService implements RecommendationsService {
+  private readonly recommendations = new Map<string, Array<Awaited<ReturnType<RecommendationsService["createRecommendation"]>>>>();
+
+  async listRecommendations(input: { userId: string }) {
+    return this.recommendations.get(input.userId) ?? [];
+  }
+
+  async createRecommendation(input: {
+    workspaceId: string;
+    userId?: string;
+    type: string;
+    title: string;
+    body: string;
+  }) {
+    const recommendation = {
+      id: `rec_${Date.now()}`,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      createdAt: new Date().toISOString(),
+      deliveredAt: null
+    };
+    const key = input.userId ?? "__workspace__";
+    const existing = this.recommendations.get(key) ?? [];
+    this.recommendations.set(key, [recommendation, ...existing]);
+    return recommendation;
+  }
+}
+
+export class MemoryTelemetryService implements TelemetryService {
+  constructor(private readonly sensorIngestionService: MemorySensorIngestionService) {}
+
+  async getOverview(input: { hours: number; bucketMinutes: number }) {
+    const now = Date.now();
+    const cutoff = now - input.hours * 60 * 60 * 1000;
+    const recent = this.sensorIngestionService.samples.filter((sample) => Date.parse(sample.receivedAt) >= cutoff);
+    const bucketMs = input.bucketMinutes * 60 * 1000;
+    const buckets = new Map<number, MemorySensorSample[]>();
+
+    for (const sample of recent) {
+      const start = Math.floor(Date.parse(sample.receivedAt) / bucketMs) * bucketMs;
+      const existing = buckets.get(start) ?? [];
+      existing.push(sample);
+      buckets.set(start, existing);
+    }
+
+    return {
+      buckets: [...buckets.entries()]
+        .sort((left, right) => left[0] - right[0])
+        .map(([bucketStart, samples]) => ({
+          bucketStart: new Date(bucketStart).toISOString(),
+          sampleCount: samples.length,
+          avgNoisePct: average(samples.map((sample) => sample.noisePct)),
+          avgLightPct: average(samples.map((sample) => sample.lightPct)),
+          avgTemperatureC: averageNullable(samples.map((sample) => sample.temperatureC)),
+          avgCo2Ppm: averageNullable(samples.map((sample) => sample.co2Ppm))
+        })),
+      latest: recent.slice(0, 20)
+    };
+  }
+
+  async enableTimescaleSupport() {
+    return {
+      enabled: false,
+      message: "Memory telemetry mode does not require TimescaleDB"
+    };
+  }
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function averageNullable(values: Array<number | null>): number | null {
+  const filtered = values.filter((value): value is number => value !== null);
+  return average(filtered);
 }

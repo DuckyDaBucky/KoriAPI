@@ -2,11 +2,17 @@ import type {
   AuthSessionResponse,
   AuthUser as SharedAuthUser,
   AuditEvent,
+  Deadline,
   DeviceConfig,
   DeviceLiveState,
   DeveloperLogEvent,
+  Note,
+  NoteRevision,
   NotificationSeverity,
+  Recommendation,
   SpotifyPresence,
+  TelemetryBucket,
+  TelemetryLatest,
   Workspace,
   WorkspaceRole
 } from "@kori/shared";
@@ -209,4 +215,47 @@ export interface AuthService {
 
 export interface WorkspaceService {
   listForUser(userId: string): Promise<WorkspaceMembership[]>;
+}
+
+export interface NotesService {
+  listNotes(input: { userId: string }): Promise<Note[]>;
+  createNote(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    type: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content: string;
+  }): Promise<Note>;
+  listRevisions(noteId: string): Promise<NoteRevision[]>;
+  createRevision(input: { noteId: string; userId: string; content: string }): Promise<NoteRevision>;
+}
+
+export interface DeadlinesService {
+  listDeadlines(input: { userId: string }): Promise<Deadline[]>;
+  createDeadline(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    dueAt: string;
+    metadata: Record<string, unknown>;
+  }): Promise<Deadline>;
+}
+
+export interface RecommendationsService {
+  listRecommendations(input: { userId: string }): Promise<Recommendation[]>;
+  createRecommendation(input: {
+    workspaceId: string;
+    userId?: string;
+    type: string;
+    title: string;
+    body: string;
+  }): Promise<Recommendation>;
+}
+
+export interface TelemetryService {
+  getOverview(input: { hours: number; bucketMinutes: number }): Promise<{
+    buckets: TelemetryBucket[];
+    latest: TelemetryLatest[];
+  }>;
+  enableTimescaleSupport(): Promise<{ enabled: boolean; message: string }>;
 }

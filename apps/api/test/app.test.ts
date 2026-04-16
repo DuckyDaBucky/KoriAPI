@@ -226,3 +226,108 @@ test("device config and rotate token routes require device auth", async () => {
 
   await app.close();
 });
+
+test("notes deadlines recommendations and telemetry routes work with a session", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
+  const note = await app.inject({
+    method: "POST",
+    url: "/v1/notes",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      workspaceId: "ws_dev",
+      title: "Research draft",
+      type: "markdown",
+      content: "# hello"
+    }
+  });
+  assert.equal(note.statusCode, 201);
+
+  const deadline = await app.inject({
+    method: "POST",
+    url: "/v1/deadlines",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      workspaceId: "ws_dev",
+      title: "Submit outline",
+      dueAt: "2026-12-31T23:59:00.000Z",
+      metadata: {
+        course: "capstone"
+      }
+    }
+  });
+  assert.equal(deadline.statusCode, 201);
+
+  const recommendation = await app.inject({
+    method: "POST",
+    url: "/v1/recommendations",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      workspaceId: "ws_dev",
+      type: "focus_nudge",
+      title: "Take a reset",
+      body: "Noise has been elevated."
+    }
+  });
+  assert.equal(recommendation.statusCode, 201);
+
+  const notes = await app.inject({
+    method: "GET",
+    url: "/v1/notes",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(notes.statusCode, 200);
+  assert.equal(notes.json().length, 1);
+
+  const deadlines = await app.inject({
+    method: "GET",
+    url: "/v1/deadlines",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(deadlines.statusCode, 200);
+  assert.equal(deadlines.json().length, 1);
+
+  const recommendations = await app.inject({
+    method: "GET",
+    url: "/v1/recommendations",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(recommendations.statusCode, 200);
+  assert.equal(recommendations.json().length, 1);
+
+  const telemetry = await app.inject({
+    method: "GET",
+    url: "/v1/admin/telemetry",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(telemetry.statusCode, 200);
+  assert.ok(Array.isArray(telemetry.json().buckets));
+
+  await app.close();
+});

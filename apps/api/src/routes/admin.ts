@@ -4,7 +4,8 @@ import {
   deviceLiveStateSchema,
   developerLogEventSchema,
   provisioningCodeRequestSchema,
-  provisioningCodeResponseSchema
+  provisioningCodeResponseSchema,
+  telemetryOverviewSchema
 } from "@kori/shared";
 import { requireAdminSession } from "../utils/admin-auth.js";
 
@@ -119,6 +120,44 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.code(201).send(provisioningCodeResponseSchema.parse(result));
+  });
+
+  app.get("/v1/admin/telemetry", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const query = request.query as { hours?: string; bucketMinutes?: string } | undefined;
+    const hours = Number(query?.hours ?? "24");
+    const bucketMinutes = Number(query?.bucketMinutes ?? "15");
+    const overview = await app.services.telemetryService.getOverview({
+      hours: Number.isFinite(hours) ? hours : 24,
+      bucketMinutes: Number.isFinite(bucketMinutes) ? bucketMinutes : 15
+    });
+
+    return telemetryOverviewSchema.parse(overview);
+  });
+
+  app.post("/v1/admin/telemetry/enable-timescale", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const result = await app.services.telemetryService.enableTimescaleSupport();
+    await app.services.auditService.record({
+      action: "telemetry.timescale_enable_attempt",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "telemetry",
+      resourceId: null,
+      metadata: result
+    });
+
+    return result;
   });
 };
 

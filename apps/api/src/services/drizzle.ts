@@ -1,6 +1,14 @@
-import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { createDbClient, schema } from "@kori/db";
-import type { AuditEvent, DeviceConfig } from "@kori/shared";
+import type {
+  AuditEvent,
+  Deadline,
+  DeviceConfig,
+  Note,
+  NoteRevision,
+  Recommendation,
+  TelemetryLatest
+} from "@kori/shared";
 import { deviceConfigSchema } from "@kori/shared";
 import { randomUUID } from "node:crypto";
 import { generateOpaqueToken, hashPassword, sha256, verifyPassword } from "../utils/crypto.js";
@@ -16,16 +24,20 @@ import type {
   DeviceAuthService,
   DeviceRegistryRecord,
   DeviceRegistryService,
+  DeadlinesService,
   HealthService,
+  NotesService,
   NotificationEventService,
   ProvisioningCodeService,
   RedisClient,
+  RecommendationsService,
   SensorIngestionInput,
   SensorIngestionResult,
   SensorIngestionService,
   ServiceHealth,
   AuditService,
   ObservabilityService,
+  TelemetryService,
   WorkspaceMembership,
   WorkspaceService
 } from "./types.js";
@@ -90,6 +102,11 @@ async function listWorkspaceMembershipsForUser(userId: string): Promise<Workspac
     createdAt: membership.createdAt.toISOString(),
     updatedAt: membership.updatedAt.toISOString()
   }));
+}
+
+async function getWorkspaceIdsForUser(userId: string): Promise<string[]> {
+  const memberships = await listWorkspaceMembershipsForUser(userId);
+  return memberships.map((workspace) => workspace.id);
 }
 
 async function buildAuthUser(user: {
@@ -590,6 +607,325 @@ export class DrizzleAuditService implements AuditService {
       metadata: row.metadata
     }));
   }
+}
+
+export class DrizzleNotesService implements NotesService {
+  async listNotes(input: { userId: string }): Promise<Note[]> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    const notes = await db.query.notes.findMany({
+      where: inArray(schema.notes.workspaceId, workspaceIds),
+      orderBy: desc(schema.notes.updatedAt)
+    });
+
+    return notes.map((note: (typeof notes)[number]) => ({
+      id: note.id,
+      title: note.title,
+      type: note.type as Note["type"],
+      content: note.content,
+      workspaceId: note.workspaceId,
+      userId: note.userId ?? null,
+      createdAt: note.createdAt.toISOString(),
+      updatedAt: note.updatedAt.toISOString()
+    }));
+  }
+
+  async createNote(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    type: "markdown" | "txt" | "latex" | "mermaid" | "drawing";
+    content: string;
+  }): Promise<Note> {
+    const db = getDb();
+    const id = createId("note");
+    const createdAt = new Date();
+    await db.insert(schema.notes).values({
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      title: input.title,
+      type: input.type,
+      content: input.content,
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await db.insert(schema.noteRevisions).values({
+      id: createId("rev"),
+      noteId: id,
+      userId: input.userId,
+      content: input.content,
+      createdAt
+    });
+
+    return {
+      id,
+      title: input.title,
+      type: input.type,
+      content: input.content,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      createdAt: createdAt.toISOString(),
+      updatedAt: createdAt.toISOString()
+    };
+  }
+
+  async listRevisions(noteId: string): Promise<NoteRevision[]> {
+    const db = getDb();
+    const revisions = await db.query.noteRevisions.findMany({
+      where: eq(schema.noteRevisions.noteId, noteId),
+      orderBy: desc(schema.noteRevisions.createdAt)
+    });
+
+    return revisions.map((revision: (typeof revisions)[number]) => ({
+      id: revision.id,
+      noteId: revision.noteId,
+      content: revision.content,
+      userId: revision.userId ?? null,
+      createdAt: revision.createdAt.toISOString()
+    }));
+  }
+
+  async createRevision(input: { noteId: string; userId: string; content: string }): Promise<NoteRevision> {
+    const db = getDb();
+    const id = createId("rev");
+    const createdAt = new Date();
+    await db.insert(schema.noteRevisions).values({
+      id,
+      noteId: input.noteId,
+      userId: input.userId,
+      content: input.content,
+      createdAt
+    });
+
+    await db
+      .update(schema.notes)
+      .set({
+        content: input.content,
+        updatedAt: createdAt
+      })
+      .where(eq(schema.notes.id, input.noteId));
+
+    return {
+      id,
+      noteId: input.noteId,
+      content: input.content,
+      userId: input.userId,
+      createdAt: createdAt.toISOString()
+    };
+  }
+}
+
+export class DrizzleDeadlinesService implements DeadlinesService {
+  async listDeadlines(input: { userId: string }): Promise<Deadline[]> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    const deadlines = await db.query.deadlines.findMany({
+      where: inArray(schema.deadlines.workspaceId, workspaceIds),
+      orderBy: desc(schema.deadlines.dueAt)
+    });
+
+    return deadlines.map((deadline: (typeof deadlines)[number]) => ({
+      id: deadline.id,
+      workspaceId: deadline.workspaceId,
+      userId: deadline.userId ?? null,
+      title: deadline.title,
+      dueAt: deadline.dueAt.toISOString(),
+      status: deadline.status,
+      metadata: deadline.metadata,
+      createdAt: deadline.createdAt.toISOString()
+    }));
+  }
+
+  async createDeadline(input: {
+    workspaceId: string;
+    userId: string;
+    title: string;
+    dueAt: string;
+    metadata: Record<string, unknown>;
+  }): Promise<Deadline> {
+    const db = getDb();
+    const id = createId("deadline");
+    const createdAt = new Date();
+    const dueAt = new Date(input.dueAt);
+    await db.insert(schema.deadlines).values({
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      title: input.title,
+      dueAt,
+      status: "OPEN",
+      metadata: input.metadata,
+      createdAt
+    });
+
+    return {
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      title: input.title,
+      dueAt: dueAt.toISOString(),
+      status: "OPEN",
+      metadata: input.metadata,
+      createdAt: createdAt.toISOString()
+    };
+  }
+}
+
+export class DrizzleRecommendationsService implements RecommendationsService {
+  async listRecommendations(input: { userId: string }): Promise<Recommendation[]> {
+    const db = getDb();
+    const workspaceIds = await getWorkspaceIdsForUser(input.userId);
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    const recommendations = await db.query.recommendations.findMany({
+      where: or(
+        eq(schema.recommendations.userId, input.userId),
+        inArray(schema.recommendations.workspaceId, workspaceIds)
+      ),
+      orderBy: desc(schema.recommendations.createdAt)
+    });
+
+    return recommendations.map((recommendation: (typeof recommendations)[number]) => ({
+      id: recommendation.id,
+      workspaceId: recommendation.workspaceId,
+      userId: recommendation.userId ?? null,
+      type: recommendation.type,
+      title: recommendation.title,
+      body: recommendation.body,
+      createdAt: recommendation.createdAt.toISOString(),
+      deliveredAt: recommendation.deliveredAt?.toISOString() ?? null
+    }));
+  }
+
+  async createRecommendation(input: {
+    workspaceId: string;
+    userId?: string;
+    type: string;
+    title: string;
+    body: string;
+  }): Promise<Recommendation> {
+    const db = getDb();
+    const id = createId("rec");
+    const createdAt = new Date();
+    await db.insert(schema.recommendations).values({
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      createdAt
+    });
+
+    return {
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      createdAt: createdAt.toISOString(),
+      deliveredAt: null
+    };
+  }
+}
+
+export class DrizzleTelemetryService implements TelemetryService {
+  async getOverview(input: { hours: number; bucketMinutes: number }) {
+    const db = getDb();
+    const since = new Date(Date.now() - input.hours * 60 * 60 * 1000);
+    const samples = await db.query.sensorSamples.findMany({
+      where: gt(schema.sensorSamples.receivedAt, since),
+      orderBy: desc(schema.sensorSamples.receivedAt),
+      limit: 1000
+    });
+
+    const latest: TelemetryLatest[] = samples.slice(0, 20).map((sample: (typeof samples)[number]) => ({
+      deviceId: sample.deviceId,
+      receivedAt: sample.receivedAt.toISOString(),
+      temperatureC: sample.temperatureC ?? null,
+      humidityPct: sample.humidityPct ?? null,
+      pressureHpa: sample.pressureHpa ?? null,
+      co2Ppm: sample.co2Ppm ?? null,
+      tvocPpb: sample.tvocPpb ?? null,
+      noisePct: sample.noisePct,
+      lightPct: sample.lightPct
+    }));
+
+    const bucketMs = input.bucketMinutes * 60 * 1000;
+    const grouped = new Map<number, typeof samples>();
+    for (const sample of samples) {
+      const bucketStart = Math.floor(sample.receivedAt.getTime() / bucketMs) * bucketMs;
+      const existing = grouped.get(bucketStart) ?? [];
+      existing.push(sample);
+      grouped.set(bucketStart, existing);
+    }
+
+    return {
+      latest,
+      buckets: [...grouped.entries()]
+        .sort((left, right) => left[0] - right[0])
+        .map(([bucketStart, bucketSamples]) => ({
+          bucketStart: new Date(bucketStart).toISOString(),
+          sampleCount: bucketSamples.length,
+          avgNoisePct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.noisePct)),
+          avgLightPct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.lightPct)),
+          avgTemperatureC: averageNullable(
+            bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.temperatureC ?? null)
+          ),
+          avgCo2Ppm: averageNullable(
+            bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.co2Ppm ?? null)
+          )
+        }))
+    };
+  }
+
+  async enableTimescaleSupport(): Promise<{ enabled: boolean; message: string }> {
+    const db = getDb();
+
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS timescaledb`);
+      await db.execute(
+        sql.raw(
+          "SELECT create_hypertable('sensor_samples', 'received_at', if_not_exists => TRUE, migrate_data => TRUE);"
+        )
+      );
+      return {
+        enabled: true,
+        message: "TimescaleDB extension enabled and sensor_samples hypertable ensured"
+      };
+    } catch (error) {
+      return {
+        enabled: false,
+        message: error instanceof Error ? error.message : "Failed to enable TimescaleDB"
+      };
+    }
+  }
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function averageNullable(values: Array<number | null>): number | null {
+  const filtered = values.filter((value): value is number => value !== null);
+  return average(filtered);
 }
 
 export class DrizzleHealthService implements HealthService {

@@ -69,6 +69,80 @@
       </section>
 
       <section class="grid two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Telemetry</h2>
+            <div class="inline-form">
+              <input id="telemetry-hours" value="24" placeholder="hours" />
+              <input id="telemetry-buckets" value="15" placeholder="bucketMinutes" />
+              <button id="telemetry-refresh-button" type="button">Refresh</button>
+              <button id="telemetry-enable-button" type="button">Enable Timescale</button>
+            </div>
+          </div>
+          <pre id="telemetry-output">No telemetry yet.</pre>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Workspaces</h2>
+            <button data-refresh="workspaces">Refresh</button>
+          </div>
+          <pre id="workspaces-output">Login to view workspaces.</pre>
+        </article>
+      </section>
+
+      <section class="grid two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Notes</h2>
+            <button data-refresh="notes">Refresh</button>
+          </div>
+          <form id="note-form" class="stacked">
+            <input name="workspaceId" placeholder="workspaceId" value="ws_dev" />
+            <input name="title" placeholder="Title" value="Iteration Note" />
+            <select name="type">
+              <option>markdown</option>
+              <option>txt</option>
+              <option>latex</option>
+              <option>mermaid</option>
+              <option>drawing</option>
+            </select>
+            <textarea name="content" rows="4">Initial note content</textarea>
+            <button type="submit">Create note</button>
+          </form>
+          <pre id="notes-output">No notes yet.</pre>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Deadlines</h2>
+            <button data-refresh="deadlines">Refresh</button>
+          </div>
+          <form id="deadline-form" class="stacked">
+            <input name="workspaceId" placeholder="workspaceId" value="ws_dev" />
+            <input name="title" placeholder="Deadline title" value="Ship next slice" />
+            <input name="dueAt" placeholder="dueAt" value="2026-12-31T23:59:00.000Z" />
+            <textarea name="metadata" rows="4">{"source":"dashboard"}</textarea>
+            <button type="submit">Create deadline</button>
+          </form>
+          <pre id="deadlines-output">No deadlines yet.</pre>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Recommendations</h2>
+          <button data-refresh="recommendations">Refresh</button>
+        </div>
+        <form id="recommendation-form" class="stacked">
+          <input name="workspaceId" placeholder="workspaceId" value="ws_dev" />
+          <input name="type" placeholder="type" value="focus_nudge" />
+          <input name="title" placeholder="title" value="Take a reset window" />
+          <textarea name="body" rows="4">Noise has been elevated for the past hour. Consider a quieter environment.</textarea>
+          <button type="submit">Create recommendation</button>
+        </form>
+        <pre id="recommendations-output">No recommendations yet.</pre>
+      </section>
+
+      <section class="grid two-col">
         <article class="panel log-panel">
           <div class="panel-head">
             <h2>Live Logs</h2>

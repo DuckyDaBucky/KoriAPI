@@ -14,14 +14,26 @@ const elements = {
   devices: document.querySelector("#devices-output"),
   logs: document.querySelector("#logs-output"),
   audit: document.querySelector("#audit-output"),
+  workspaces: document.querySelector("#workspaces-output"),
+  notes: document.querySelector("#notes-output"),
+  deadlines: document.querySelector("#deadlines-output"),
+  recommendations: document.querySelector("#recommendations-output"),
+  telemetry: document.querySelector("#telemetry-output"),
   provisionForm: document.querySelector("#provision-form"),
   provisionOutput: document.querySelector("#provision-output"),
+  noteForm: document.querySelector("#note-form"),
+  deadlineForm: document.querySelector("#deadline-form"),
+  recommendationForm: document.querySelector("#recommendation-form"),
   requestForm: document.querySelector("#request-form"),
   requestOutput: document.querySelector("#request-output"),
   spotifyOutput: document.querySelector("#spotify-output"),
   spotifyUserId: document.querySelector("#spotify-user-id"),
   spotifyStatusButton: document.querySelector("#spotify-status-button"),
-  spotifyPresenceButton: document.querySelector("#spotify-presence-button")
+  spotifyPresenceButton: document.querySelector("#spotify-presence-button"),
+  telemetryHours: document.querySelector("#telemetry-hours"),
+  telemetryBuckets: document.querySelector("#telemetry-buckets"),
+  telemetryRefreshButton: document.querySelector("#telemetry-refresh-button"),
+  telemetryEnableButton: document.querySelector("#telemetry-enable-button")
 };
 
 if (elements.adminToken) {
@@ -81,8 +93,42 @@ async function refreshSpotifyStatus() {
   );
 }
 
+async function refreshWorkspaces() {
+  elements.workspaces.textContent = pretty(await api("/v1/workspaces"));
+}
+
+async function refreshNotes() {
+  elements.notes.textContent = pretty(await api("/v1/notes"));
+}
+
+async function refreshDeadlines() {
+  elements.deadlines.textContent = pretty(await api("/v1/deadlines"));
+}
+
+async function refreshRecommendations() {
+  elements.recommendations.textContent = pretty(await api("/v1/recommendations"));
+}
+
+async function refreshTelemetry() {
+  const hours = elements.telemetryHours.value.trim();
+  const bucketMinutes = elements.telemetryBuckets.value.trim();
+  elements.telemetry.textContent = pretty(
+    await api(`/v1/admin/telemetry?hours=${encodeURIComponent(hours)}&bucketMinutes=${encodeURIComponent(bucketMinutes)}`)
+  );
+}
+
 async function refreshAll() {
-  await Promise.all([refreshOverview(), refreshDevices(), refreshLogs(), refreshAudit()]);
+  await Promise.all([
+    refreshOverview(),
+    refreshDevices(),
+    refreshLogs(),
+    refreshAudit(),
+    refreshWorkspaces(),
+    refreshNotes(),
+    refreshDeadlines(),
+    refreshRecommendations(),
+    refreshTelemetry()
+  ]);
 }
 
 function connectSocket() {
@@ -167,6 +213,40 @@ elements.provisionForm?.addEventListener("submit", async (event) => {
   );
 });
 
+elements.noteForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(elements.noteForm).entries());
+  elements.notes.textContent = pretty(
+    await api("/v1/notes", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+  );
+});
+
+elements.deadlineForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(elements.deadlineForm).entries());
+  payload.metadata = JSON.parse(String(payload.metadata));
+  elements.deadlines.textContent = pretty(
+    await api("/v1/deadlines", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+  );
+});
+
+elements.recommendationForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(elements.recommendationForm).entries());
+  elements.recommendations.textContent = pretty(
+    await api("/v1/recommendations", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+  );
+});
+
 elements.requestForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(elements.requestForm);
@@ -202,6 +282,24 @@ elements.spotifyPresenceButton?.addEventListener("click", async () => {
   }
 });
 
+elements.telemetryRefreshButton?.addEventListener("click", () => {
+  refreshTelemetry().catch((error) => {
+    elements.telemetry.textContent = error.message;
+  });
+});
+
+elements.telemetryEnableButton?.addEventListener("click", async () => {
+  try {
+    elements.telemetry.textContent = pretty(
+      await api("/v1/admin/telemetry/enable-timescale", {
+        method: "POST"
+      })
+    );
+  } catch (error) {
+    elements.telemetry.textContent = error.message;
+  }
+});
+
 document.querySelectorAll("[data-refresh]").forEach((button) => {
   button.addEventListener("click", () => {
     const action = button.getAttribute("data-refresh");
@@ -209,6 +307,10 @@ document.querySelectorAll("[data-refresh]").forEach((button) => {
       action === "devices" ? refreshDevices :
       action === "logs" ? refreshLogs :
       action === "audit" ? refreshAudit :
+      action === "workspaces" ? refreshWorkspaces :
+      action === "notes" ? refreshNotes :
+      action === "deadlines" ? refreshDeadlines :
+      action === "recommendations" ? refreshRecommendations :
       refreshOverview;
 
     runner().catch((error) => {
@@ -216,13 +318,17 @@ document.querySelectorAll("[data-refresh]").forEach((button) => {
         action === "devices" ? elements.devices :
         action === "logs" ? elements.logs :
         action === "audit" ? elements.audit :
+        action === "workspaces" ? elements.workspaces :
+        action === "notes" ? elements.notes :
+        action === "deadlines" ? elements.deadlines :
+        action === "recommendations" ? elements.recommendations :
         elements.overview;
       target.textContent = error.message;
     });
   });
 });
 
-if (state.adminToken) {
+if (state.adminToken || state.sessionToken) {
   refreshAll()
     .then(() => {
       connectSocket();

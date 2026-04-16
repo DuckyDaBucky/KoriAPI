@@ -70,6 +70,105 @@ export const authSessionResponseSchema = z.object({
 });
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
 
+export const noteSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  type: z.enum(["markdown", "txt", "latex", "mermaid", "drawing"]),
+  content: z.string(),
+  workspaceId: z.string(),
+  userId: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export type Note = z.infer<typeof noteSchema>;
+
+export const noteRevisionSchema = z.object({
+  id: z.string(),
+  noteId: z.string(),
+  content: z.string(),
+  userId: z.string().nullable(),
+  createdAt: z.string().datetime()
+});
+export type NoteRevision = z.infer<typeof noteRevisionSchema>;
+
+export const noteCreateRequestSchema = z.object({
+  workspaceId: z.string(),
+  title: z.string().min(1).max(200),
+  type: z.enum(["markdown", "txt", "latex", "mermaid", "drawing"]),
+  content: z.string().default("")
+});
+
+export const noteRevisionCreateRequestSchema = z.object({
+  content: z.string()
+});
+
+export const deadlineSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  userId: z.string().nullable(),
+  title: z.string(),
+  dueAt: z.string().datetime(),
+  status: z.enum(["OPEN", "COMPLETED", "MISSED"]),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type Deadline = z.infer<typeof deadlineSchema>;
+
+export const deadlineCreateRequestSchema = z.object({
+  workspaceId: z.string(),
+  title: z.string().min(1).max(200),
+  dueAt: z.string().datetime(),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+
+export const recommendationSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  userId: z.string().nullable(),
+  type: z.string(),
+  title: z.string(),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+  deliveredAt: z.string().datetime().nullable()
+});
+export type Recommendation = z.infer<typeof recommendationSchema>;
+
+export const recommendationCreateRequestSchema = z.object({
+  workspaceId: z.string(),
+  userId: z.string().optional(),
+  type: z.string().min(1).max(64),
+  title: z.string().min(1).max(200),
+  body: z.string().min(1)
+});
+
+export const telemetryBucketSchema = z.object({
+  bucketStart: z.string().datetime(),
+  sampleCount: z.number().int().nonnegative(),
+  avgNoisePct: z.number().nullable(),
+  avgLightPct: z.number().nullable(),
+  avgTemperatureC: z.number().nullable(),
+  avgCo2Ppm: z.number().nullable()
+});
+export type TelemetryBucket = z.infer<typeof telemetryBucketSchema>;
+
+export const telemetryLatestSchema = z.object({
+  deviceId: z.string(),
+  receivedAt: z.string().datetime(),
+  temperatureC: z.number().nullable(),
+  humidityPct: z.number().nullable(),
+  pressureHpa: z.number().nullable(),
+  co2Ppm: z.number().nullable(),
+  tvocPpb: z.number().nullable(),
+  noisePct: z.number(),
+  lightPct: z.number()
+});
+export type TelemetryLatest = z.infer<typeof telemetryLatestSchema>;
+
+export const telemetryOverviewSchema = z.object({
+  buckets: z.array(telemetryBucketSchema),
+  latest: z.array(telemetryLatestSchema)
+});
+
 export const deviceConfigSchema = z.object({
   telemetryIntervalSec: z.number().int().positive().default(2),
   thresholds: z.object({
