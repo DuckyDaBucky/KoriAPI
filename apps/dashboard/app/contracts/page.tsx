@@ -1,32 +1,29 @@
+import { DashboardShell } from "@/components/dashboard-shell";
 import { fetchJson } from "@/lib/api";
-
-async function getContracts() {
-  const adminToken = process.env.KORI_ADMIN_API_KEY ?? process.env.ADMIN_API_KEY;
-  if (!adminToken) {
-    return null;
-  }
-
-  try {
-    return await fetchJson("/v1/admin/contracts", {
-      headers: {
-        "x-kori-admin-key": adminToken
-      }
-    });
-  } catch {
-    return null;
-  }
-}
+import { requireDashboardSession } from "@/lib/auth";
 
 export default async function ContractsPage() {
-  const contracts = await getContracts();
+  const { session, sessionToken } = await requireDashboardSession();
+  const headers = {
+    "x-kori-session": sessionToken
+  };
+  const [manifest, openapi, asyncapi] = await Promise.all([
+    fetchJson("/v1/admin/contracts", { headers }),
+    fetchJson("/v1/admin/contracts/openapi.json", { headers }),
+    fetchJson("/v1/admin/contracts/asyncapi.json", { headers })
+  ]);
+
   return (
-    <main className="content">
-      <section className="panel">
-        <p className="eyebrow">Contracts</p>
-        <h1>Generated API specifications</h1>
-        <p className="lede">Manual manifest plus generated OpenAPI and AsyncAPI documents for the control plane.</p>
-      </section>
-      <section className="panel mono stream">{contracts ? JSON.stringify(contracts, null, 2) : "Set KORI_ADMIN_API_KEY to preview contract data."}</section>
-    </main>
+    <DashboardShell
+      title="Contracts and API explorer"
+      description="REST manifest plus generated OpenAPI and AsyncAPI documents exposed through the authenticated dashboard."
+      session={session}
+    >
+      <div className="grid">
+        <section className="panel mono stream">{JSON.stringify(manifest, null, 2)}</section>
+        <section className="panel mono stream">{JSON.stringify(openapi, null, 2)}</section>
+        <section className="panel mono stream">{JSON.stringify(asyncapi, null, 2)}</section>
+      </div>
+    </DashboardShell>
   );
 }

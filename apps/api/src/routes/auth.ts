@@ -10,13 +10,18 @@ import {
   mfaEnrollRequestSchema,
   mfaEnrollResponseSchema,
   mfaFactorSchema,
-  mfaVerifyRequestSchema
+  mfaVerifyRequestSchema,
+  passwordResetForgotRequestSchema,
+  passwordResetForgotResponseSchema,
+  passwordResetRequestSchema
 } from "@kori/shared";
 import {
+  clearSessionCookies,
   ensureAdminWorkspaceAccess,
   extractSessionToken,
   requireAdminSession,
-  requireUserSession
+  requireUserSession,
+  setSessionCookies
 } from "../utils/admin-auth.js";
 
 const authRoutes: FastifyPluginAsync = async (app) => {
@@ -44,6 +49,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
         }
       });
 
+      setSessionCookies(reply, session);
       return reply.code(201).send(authSessionResponseSchema.parse(session));
     } catch (error) {
       if (error instanceof Error && error.message === "EMAIL_ALREADY_EXISTS") {
@@ -83,6 +89,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       metadata: {}
     });
 
+    setSessionCookies(reply, session);
     return authSessionResponseSchema.parse(session);
   });
 
@@ -287,7 +294,70 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    clearSessionCookies(reply);
     return { ok: true };
+  });
+
+  app.post("/v1/auth/password/forgot", async (request, reply) => {
+    const body = passwordResetForgotRequestSchema.parse(request.body);
+    const result = await app.services.authService.requestPasswordReset({
+      email: body.email,
+      expiresInSec: 60 * 60
+    });
+
+    await app.services.auditService.record({
+      action: "auth.password.forgot",
+      actorType: "system",
+      actorId: null,
+      workspaceId: null,
+      userId: null,
+      resourceType: "password_reset",
+      resourceId: null,
+      metadata: {
+        email: body.email,
+        previewIssued: Boolean(result.resetToken)
+      }
+    });
+
+    return passwordResetForgotResponseSchema.parse(
+      app.config.NODE_ENV === "production"
+        ? { ok: true }
+        : {
+            ok: true,
+            ...(result.resetToken ? { resetToken: result.resetToken } : {}),
+            ...(result.expiresAt ? { expiresAt: result.expiresAt } : {})
+          }
+    );
+  });
+
+  app.post("/v1/auth/password/reset", async (request, reply) => {
+    const body = passwordResetRequestSchema.parse(request.body);
+    const session = await app.services.authService.resetPassword({
+      token: body.token,
+      password: body.password
+    });
+    if (!session) {
+      return reply.code(400).send({
+        error: {
+          code: "PASSWORD_RESET_INVALID",
+          message: "Password reset token is invalid or expired"
+        }
+      });
+    }
+
+    await app.services.auditService.record({
+      action: "auth.password.reset",
+      actorType: "user",
+      actorId: session.user.id,
+      workspaceId: session.user.workspaces[0]?.id ?? null,
+      userId: session.user.id,
+      resourceType: "password_reset",
+      resourceId: session.user.id,
+      metadata: {}
+    });
+
+    setSessionCookies(reply, session);
+    return authSessionResponseSchema.parse(session);
   });
 };
 

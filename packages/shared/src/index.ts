@@ -63,6 +63,21 @@ export const authLoginRequestSchema = z.object({
   password: z.string().min(1).max(128)
 });
 
+export const passwordResetForgotRequestSchema = z.object({
+  email: z.string().email()
+});
+
+export const passwordResetForgotResponseSchema = z.object({
+  ok: z.boolean(),
+  resetToken: z.string().optional(),
+  expiresAt: z.string().datetime().optional()
+});
+
+export const passwordResetRequestSchema = z.object({
+  token: z.string().min(8),
+  password: z.string().min(10).max(128)
+});
+
 export const authSessionResponseSchema = z.object({
   sessionToken: z.string(),
   expiresAt: z.string().datetime(),
@@ -428,6 +443,23 @@ export const deviceTokenRotateResponseSchema = z.object({
   rotatedAt: z.string().datetime()
 });
 
+export const deviceAdminActionRequestSchema = z.object({
+  reason: z.string().min(1).max(240).optional(),
+  telemetryIntervalSec: z.number().int().positive().optional(),
+  thresholds: deviceConfigSchema.shape.thresholds.optional(),
+  timerMethod: z.string().min(1).max(64).optional()
+});
+
+export const deviceAdminActionResponseSchema = z.object({
+  ok: z.boolean(),
+  deviceId: z.string(),
+  action: z.enum(["revoke", "reprovision", "mark_offline", "config_update"]),
+  deviceToken: z.string().optional(),
+  expiresAt: z.string().datetime().optional(),
+  rotatedAt: z.string().datetime().optional(),
+  configVersion: z.number().int().positive().optional()
+});
+
 const sensorPayloadSchema = z.object({
   deviceId: z.string().optional(),
   token: z.string().optional(),
@@ -662,3 +694,15 @@ export const errorEnvelopeSchema = z.object({
     message: z.string()
   })
 });
+
+export const dashboardViewSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  workspaceId: z.string(),
+  userId: z.string().nullable(),
+  filters: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export type DashboardView = z.infer<typeof dashboardViewSchema>;

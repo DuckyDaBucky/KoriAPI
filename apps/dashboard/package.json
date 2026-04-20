@@ -5,10 +5,11 @@
   "description": "Next.js admin dashboard for KoriAPI",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start"
   },
   "dependencies": {
+    "@kori/shared": "0.1.0",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

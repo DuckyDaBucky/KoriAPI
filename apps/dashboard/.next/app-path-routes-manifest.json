@@ -1,0 +1,11 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/_global-error/page": "/_global-error",
+  "/contracts/page": "/contracts",
+  "/devices/page": "/devices",
+  "/integrations/page": "/integrations",
+  "/jobs/page": "/jobs",
+  "/login/page": "/login",
+  "/page": "/",
+  "/telemetry/page": "/telemetry"
+}

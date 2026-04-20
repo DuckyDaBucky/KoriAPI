@@ -283,6 +283,79 @@ export class DrizzleAuthService implements AuthService, WorkspaceService {
     await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, sha256(token)));
   }
 
+  async requestPasswordReset(input: { email: string; expiresInSec?: number }): Promise<{
+    ok: boolean;
+    resetToken?: string;
+    expiresAt?: string;
+  }> {
+    const db = getDb();
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.email, input.email)
+    });
+    if (!user) {
+      return { ok: true };
+    }
+
+    const resetToken = `kori_pwd_${generateOpaqueToken(18)}`;
+    const expiresAt = new Date(Date.now() + (input.expiresInSec ?? 3600) * 1000);
+    await db.insert(schema.passwordResetTokens).values({
+      id: createId("pwd"),
+      tokenHash: sha256(resetToken),
+      expiresAt,
+      userId: user.id
+    });
+
+    return {
+      ok: true,
+      resetToken,
+      expiresAt: expiresAt.toISOString()
+    };
+  }
+
+  async resetPassword(input: { token: string; password: string }): Promise<AuthSession | null> {
+    const db = getDb();
+    const reset = await db.query.passwordResetTokens.findFirst({
+      where: and(
+        eq(schema.passwordResetTokens.tokenHash, sha256(input.token)),
+        isNull(schema.passwordResetTokens.usedAt),
+        gt(schema.passwordResetTokens.expiresAt, new Date())
+      )
+    });
+    if (!reset) {
+      return null;
+    }
+
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, reset.userId)
+    });
+    if (!user) {
+      return null;
+    }
+
+    await db
+      .update(schema.users)
+      .set({
+        passwordHash: hashPassword(input.password),
+        updatedAt: new Date()
+      })
+      .where(eq(schema.users.id, user.id));
+
+    await db
+      .update(schema.passwordResetTokens)
+      .set({
+        usedAt: new Date()
+      })
+      .where(eq(schema.passwordResetTokens.id, reset.id));
+
+    await this.invalidateSessionsForUser(user.id);
+    return this.createSession(await buildAuthUser(user));
+  }
+
+  async invalidateSessionsForUser(userId: string): Promise<void> {
+    const db = getDb();
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+  }
+
   async listForUser(userId: string): Promise<WorkspaceMembership[]> {
     return listWorkspaceMembershipsForUser(userId);
   }
@@ -548,6 +621,95 @@ export class DrizzleDeviceService implements BootstrapService, DeviceAuthService
     });
 
     return normalizeDeviceConfig(config);
+  }
+
+  async revokeDevice(input: { deviceId: string; reason?: string | null }): Promise<boolean> {
+    const db = getDb();
+    const device = await db.query.devices.findFirst({
+      where: eq(schema.devices.id, input.deviceId)
+    });
+    if (!device) {
+      return false;
+    }
+
+    await db
+      .update(schema.deviceTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(schema.deviceTokens.deviceId, input.deviceId), isNull(schema.deviceTokens.revokedAt)));
+    await db
+      .update(schema.devices)
+      .set({
+        status: "OFFLINE",
+        updatedAt: new Date()
+      })
+      .where(eq(schema.devices.id, input.deviceId));
+    return true;
+  }
+
+  async reprovisionDevice(input: { deviceId: string }): Promise<{ token: string; expiresAt: string; rotatedAt: string }> {
+    return this.rotateToken(input);
+  }
+
+  async updateDeviceConfig(input: {
+    deviceId: string;
+    telemetryIntervalSec?: number;
+    thresholds?: DeviceConfig["thresholds"];
+    timerMethod?: string;
+  }): Promise<{ config: DeviceConfig; version: number }> {
+    const db = getDb();
+    const existing = await db.query.deviceConfigs.findFirst({
+      where: eq(schema.deviceConfigs.deviceId, input.deviceId)
+    });
+    if (!existing) {
+      throw new Error("DEVICE_NOT_FOUND");
+    }
+
+    const nextConfig = deviceConfigSchema.parse({
+      telemetryIntervalSec: input.telemetryIntervalSec ?? existing.telemetryIntervalSec,
+      thresholds: input.thresholds ?? existing.thresholds,
+      timerMethod: input.timerMethod ?? existing.timerMethod
+    });
+    const version = existing.version + 1;
+    await db
+      .update(schema.deviceConfigs)
+      .set({
+        telemetryIntervalSec: nextConfig.telemetryIntervalSec,
+        thresholds: nextConfig.thresholds,
+        timerMethod: nextConfig.timerMethod,
+        version,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.deviceConfigs.deviceId, input.deviceId));
+    await db.insert(schema.deviceConfigVersions).values({
+      id: createId("cfgv"),
+      deviceId: input.deviceId,
+      version,
+      config: nextConfig
+    });
+
+    return {
+      config: nextConfig,
+      version
+    };
+  }
+
+  async markDeviceOffline(input: { deviceId: string; reason?: string | null }): Promise<boolean> {
+    const db = getDb();
+    const device = await db.query.devices.findFirst({
+      where: eq(schema.devices.id, input.deviceId)
+    });
+    if (!device) {
+      return false;
+    }
+
+    await db
+      .update(schema.devices)
+      .set({
+        status: "OFFLINE",
+        updatedAt: new Date()
+      })
+      .where(eq(schema.devices.id, input.deviceId));
+    return true;
   }
 }
 
@@ -1088,50 +1250,124 @@ export class DrizzleTelemetryService implements TelemetryService {
   async getOverview(input: { hours: number; bucketMinutes: number }) {
     const db = getDb();
     const since = new Date(Date.now() - input.hours * 60 * 60 * 1000);
-    const samples = await db.query.sensorSamples.findMany({
-      where: gt(schema.sensorSamples.receivedAt, since),
-      orderBy: desc(schema.sensorSamples.receivedAt),
-      limit: 1000
-    });
+    try {
+      const bucketInterval = `${Math.max(1, input.bucketMinutes)} minutes`;
+      const bucketRows = (await db.execute(sql.raw(`
+        SELECT
+          time_bucket('${bucketInterval}', received_at) AS bucket_start,
+          count(*)::int AS sample_count,
+          avg(noise_pct)::float AS avg_noise_pct,
+          avg(light_pct)::float AS avg_light_pct,
+          avg(temperature_c)::float AS avg_temperature_c,
+          avg(co2_ppm)::float AS avg_co2_ppm
+        FROM sensor_samples
+        WHERE received_at > now() - interval '${Math.max(1, input.hours)} hours'
+        GROUP BY bucket_start
+        ORDER BY bucket_start ASC
+      `))) as Array<{
+        bucket_start: Date;
+        sample_count: number;
+        avg_noise_pct: number | null;
+        avg_light_pct: number | null;
+        avg_temperature_c: number | null;
+        avg_co2_ppm: number | null;
+      }>;
 
-    const latest: TelemetryLatest[] = samples.slice(0, 20).map((sample: (typeof samples)[number]) => ({
-      deviceId: sample.deviceId,
-      receivedAt: sample.receivedAt.toISOString(),
-      temperatureC: sample.temperatureC ?? null,
-      humidityPct: sample.humidityPct ?? null,
-      pressureHpa: sample.pressureHpa ?? null,
-      co2Ppm: sample.co2Ppm ?? null,
-      tvocPpb: sample.tvocPpb ?? null,
-      noisePct: sample.noisePct,
-      lightPct: sample.lightPct
-    }));
+      const latestRows = (await db.execute(sql.raw(`
+        SELECT
+          device_id,
+          last(received_at, received_at) AS received_at,
+          last(temperature_c, received_at) AS temperature_c,
+          last(humidity_pct, received_at) AS humidity_pct,
+          last(pressure_hpa, received_at) AS pressure_hpa,
+          last(co2_ppm, received_at) AS co2_ppm,
+          last(tvoc_ppb, received_at) AS tvoc_ppb,
+          last(noise_pct, received_at) AS noise_pct,
+          last(light_pct, received_at) AS light_pct
+        FROM sensor_samples
+        WHERE received_at > now() - interval '${Math.max(1, input.hours)} hours'
+        GROUP BY device_id
+        ORDER BY received_at DESC
+        LIMIT 20
+      `))) as Array<{
+        device_id: string;
+        received_at: Date;
+        temperature_c: number | null;
+        humidity_pct: number | null;
+        pressure_hpa: number | null;
+        co2_ppm: number | null;
+        tvoc_ppb: number | null;
+        noise_pct: number;
+        light_pct: number;
+      }>;
 
-    const bucketMs = input.bucketMinutes * 60 * 1000;
-    const grouped = new Map<number, typeof samples>();
-    for (const sample of samples) {
-      const bucketStart = Math.floor(sample.receivedAt.getTime() / bucketMs) * bucketMs;
-      const existing = grouped.get(bucketStart) ?? [];
-      existing.push(sample);
-      grouped.set(bucketStart, existing);
-    }
-
-    return {
-      latest,
-      buckets: [...grouped.entries()]
-        .sort((left, right) => left[0] - right[0])
-        .map(([bucketStart, bucketSamples]) => ({
-          bucketStart: new Date(bucketStart).toISOString(),
-          sampleCount: bucketSamples.length,
-          avgNoisePct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.noisePct)),
-          avgLightPct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.lightPct)),
-          avgTemperatureC: averageNullable(
-            bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.temperatureC ?? null)
-          ),
-          avgCo2Ppm: averageNullable(
-            bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.co2Ppm ?? null)
-          )
+      return {
+        latest: latestRows.map((row) => ({
+          deviceId: row.device_id,
+          receivedAt: row.received_at.toISOString(),
+          temperatureC: row.temperature_c,
+          humidityPct: row.humidity_pct,
+          pressureHpa: row.pressure_hpa,
+          co2Ppm: row.co2_ppm,
+          tvocPpb: row.tvoc_ppb,
+          noisePct: row.noise_pct,
+          lightPct: row.light_pct
+        })),
+        buckets: bucketRows.map((row) => ({
+          bucketStart: row.bucket_start.toISOString(),
+          sampleCount: Number(row.sample_count),
+          avgNoisePct: row.avg_noise_pct,
+          avgLightPct: row.avg_light_pct,
+          avgTemperatureC: row.avg_temperature_c,
+          avgCo2Ppm: row.avg_co2_ppm
         }))
-    };
+      };
+    } catch {
+      const samples = await db.query.sensorSamples.findMany({
+        where: gt(schema.sensorSamples.receivedAt, since),
+        orderBy: desc(schema.sensorSamples.receivedAt),
+        limit: 1000
+      });
+
+      const latest: TelemetryLatest[] = samples.slice(0, 20).map((sample: (typeof samples)[number]) => ({
+        deviceId: sample.deviceId,
+        receivedAt: sample.receivedAt.toISOString(),
+        temperatureC: sample.temperatureC ?? null,
+        humidityPct: sample.humidityPct ?? null,
+        pressureHpa: sample.pressureHpa ?? null,
+        co2Ppm: sample.co2Ppm ?? null,
+        tvocPpb: sample.tvocPpb ?? null,
+        noisePct: sample.noisePct,
+        lightPct: sample.lightPct
+      }));
+
+      const bucketMs = input.bucketMinutes * 60 * 1000;
+      const grouped = new Map<number, typeof samples>();
+      for (const sample of samples) {
+        const bucketStart = Math.floor(sample.receivedAt.getTime() / bucketMs) * bucketMs;
+        const existing = grouped.get(bucketStart) ?? [];
+        existing.push(sample);
+        grouped.set(bucketStart, existing);
+      }
+
+      return {
+        latest,
+        buckets: [...grouped.entries()]
+          .sort((left, right) => left[0] - right[0])
+          .map(([bucketStart, bucketSamples]) => ({
+            bucketStart: new Date(bucketStart).toISOString(),
+            sampleCount: bucketSamples.length,
+            avgNoisePct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.noisePct)),
+            avgLightPct: average(bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.lightPct)),
+            avgTemperatureC: averageNullable(
+              bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.temperatureC ?? null)
+            ),
+            avgCo2Ppm: averageNullable(
+              bucketSamples.map((sample: (typeof bucketSamples)[number]) => sample.co2Ppm ?? null)
+            )
+          }))
+      };
+    }
   }
 
   async enableTimescaleSupport(): Promise<{ enabled: boolean; message: string }> {
@@ -1144,9 +1380,33 @@ export class DrizzleTelemetryService implements TelemetryService {
           "SELECT create_hypertable('sensor_samples', 'received_at', if_not_exists => TRUE, migrate_data => TRUE);"
         )
       );
+      await db.execute(
+        sql.raw(
+          "ALTER TABLE sensor_samples SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');"
+        )
+      );
+      await db.execute(sql.raw("SELECT add_retention_policy('sensor_samples', INTERVAL '30 days', if_not_exists => TRUE);"));
+      await db.execute(sql.raw("SELECT add_compression_policy('sensor_samples', INTERVAL '7 days', if_not_exists => TRUE);"));
+      await db.execute(
+        sql.raw(`
+          CREATE MATERIALIZED VIEW IF NOT EXISTS sensor_samples_15m
+          WITH (timescaledb.continuous) AS
+          SELECT
+            time_bucket('15 minutes', received_at) AS bucket_start,
+            device_id,
+            count(*)::int AS sample_count,
+            avg(noise_pct)::float AS avg_noise_pct,
+            avg(light_pct)::float AS avg_light_pct,
+            avg(temperature_c)::float AS avg_temperature_c,
+            avg(co2_ppm)::float AS avg_co2_ppm
+          FROM sensor_samples
+          GROUP BY bucket_start, device_id
+          WITH NO DATA;
+        `)
+      );
       return {
         enabled: true,
-        message: "TimescaleDB extension enabled and sensor_samples hypertable ensured"
+        message: "TimescaleDB extension, hypertable, retention, compression, and continuous aggregate are enabled"
       };
     } catch (error) {
       return {

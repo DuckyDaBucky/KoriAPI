@@ -115,6 +115,17 @@ export const invitations = pgTable("invitations", {
   invitedByUserId: varchar("invited_by_user_id", { length: 64 }).references(() => users.id, { onDelete: "set null" })
 });
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  userId: varchar("user_id", { length: 64 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" })
+});
+
 export const userApiKeys = pgTable("user_api_keys", {
   id: varchar("id", { length: 64 }).primaryKey(),
   label: varchar("label", { length: 120 }).notNull(),
@@ -480,6 +491,7 @@ export const dbTables = {
   mfaFactors,
   serviceTokens,
   invitations,
+  passwordResetTokens,
   userApiKeys,
   deviceProvisioningCodes,
   devices,

@@ -59,6 +59,10 @@ textarea {
   padding: 28px;
 }
 
+.page-header {
+  margin-bottom: 20px;
+}
+
 .brand {
   margin-bottom: 24px;
 }
@@ -211,6 +215,28 @@ textarea {
   color: #031018;
   font-weight: 700;
   cursor: pointer;
+}
+
+.button.secondary {
+  width: 100%;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+.button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.session-card {
+  margin-top: 24px;
+}
+
+.error-text {
+  margin: 0;
+  color: var(--danger);
 }
 
 @media (max-width: 980px) {

@@ -3,6 +3,23 @@ import type { AppEnv } from "../config/env.js";
 import { safeTokenCompare } from "./crypto.js";
 import type { AdminSession, AuthSession } from "../services/types.js";
 
+export const sessionCookieName = "better-auth.session_token";
+export const legacySessionCookieName = "kori_session";
+
+function parseCookies(request: FastifyRequest | { headers: Record<string, unknown> }): Record<string, string> {
+  const cookieHeader = request.headers.cookie;
+  const cookieString = typeof cookieHeader === "string" ? cookieHeader : Array.isArray(cookieHeader) ? cookieHeader[0] : "";
+  const output: Record<string, string> = {};
+  for (const segment of cookieString.split(";")) {
+    const [rawKey, ...rawValue] = segment.trim().split("=");
+    if (!rawKey || rawValue.length === 0) {
+      continue;
+    }
+    output[rawKey] = decodeURIComponent(rawValue.join("="));
+  }
+  return output;
+}
+
 export function extractAdminToken(request: FastifyRequest): string | null {
   const headerValue = request.headers["x-kori-admin-key"];
   const directHeader = typeof headerValue === "string" ? headerValue : Array.isArray(headerValue) ? headerValue[0] : null;
@@ -29,9 +46,49 @@ export function extractSessionToken(request: FastifyRequest): string | null {
   if (authorization?.startsWith("Session ")) {
     return authorization.slice("Session ".length).trim();
   }
+  if (authorization?.startsWith("Bearer ")) {
+    return authorization.slice("Bearer ".length).trim();
+  }
+
+  const cookies = parseCookies(request);
+  if (cookies[sessionCookieName]) {
+    return cookies[sessionCookieName];
+  }
+  if (cookies[legacySessionCookieName]) {
+    return cookies[legacySessionCookieName];
+  }
 
   const queryValue = (request.query as Record<string, unknown> | undefined)?.sessionToken;
   return typeof queryValue === "string" ? queryValue : null;
+}
+
+function buildCookie(name: string, value: string, expiresAt: Date): string {
+  return [
+    `${name}=${encodeURIComponent(value)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    expiresAt ? `Expires=${expiresAt.toUTCString()}` : "",
+    process.env.NODE_ENV === "production" ? "Secure" : ""
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+export function setSessionCookies(reply: FastifyReply, session: AuthSession): void {
+  const expiresAt = new Date(session.expiresAt);
+  reply.header("set-cookie", [
+    buildCookie(sessionCookieName, session.sessionToken, expiresAt),
+    buildCookie(legacySessionCookieName, session.sessionToken, expiresAt)
+  ]);
+}
+
+export function clearSessionCookies(reply: FastifyReply): void {
+  const expiresAt = new Date(0);
+  reply.header("set-cookie", [
+    buildCookie(sessionCookieName, "", expiresAt),
+    buildCookie(legacySessionCookieName, "", expiresAt)
+  ]);
 }
 
 export function isAdminAuthorized(token: string | null, env: AppEnv): boolean {

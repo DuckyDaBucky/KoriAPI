@@ -15,8 +15,6 @@ import workspaceRoutes from "./routes/workspaces.js";
 import wsRoutes from "./routes/ws.js";
 import adminRoutes from "./routes/admin.js";
 import spotifyRoutes from "./routes/spotify.js";
-import dashboardRoutes from "./routes/dashboard.js";
-import { createBetterAuthStub, registerBetterAuthStub } from "./services/better-auth.js";
 import {
   MemoryAuthService,
   MemoryBootstrapService,
@@ -196,14 +194,6 @@ export async function buildServer(options: BuildServerOptions = {}) {
     });
   });
 
-  const betterAuthOptions: { secret?: string | undefined; baseUrl?: string | undefined } = {};
-  if (env.BETTER_AUTH_SECRET) {
-    betterAuthOptions.secret = env.BETTER_AUTH_SECRET;
-  }
-  if (env.BETTER_AUTH_BASE_URL) {
-    betterAuthOptions.baseUrl = env.BETTER_AUTH_BASE_URL;
-  }
-  await registerBetterAuthStub(app, createBetterAuthStub(betterAuthOptions));
   await app.register(healthRoute);
   await app.register(authRoutes);
   await app.register(serviceTokenRoutes);
@@ -215,7 +205,6 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(deviceRoutes);
   await app.register(adminRoutes);
   await app.register(spotifyRoutes);
-  await app.register(dashboardRoutes);
   await app.register(wsRoutes);
 
   return app;

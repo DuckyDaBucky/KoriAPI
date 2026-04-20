@@ -195,6 +195,71 @@ export class MemoryBootstrapService
     throw new Error("DEVICE_NOT_FOUND");
   }
 
+  async revokeDevice(input: { deviceId: string; reason?: string | null }): Promise<boolean> {
+    for (const device of this.devices.values()) {
+      if (device.id !== input.deviceId) {
+        continue;
+      }
+
+      this.tokens.delete(device.token);
+      device.status = "OFFLINE";
+      device.lastSeenAt = new Date().toISOString();
+      return true;
+    }
+
+    return false;
+  }
+
+  async reprovisionDevice(input: { deviceId: string }): Promise<{ token: string; expiresAt: string; rotatedAt: string }> {
+    return this.rotateToken(input);
+  }
+
+  async updateDeviceConfig(input: {
+    deviceId: string;
+    telemetryIntervalSec?: number;
+    thresholds?: {
+      co2Ppm: number;
+      noisePct: number;
+      temperatureHighC: number;
+      temperatureLowC: number;
+    };
+    timerMethod?: string;
+  }): Promise<{ config: typeof deviceConfigSchema._type; version: number }> {
+    for (const device of this.devices.values()) {
+      if (device.id !== input.deviceId) {
+        continue;
+      }
+
+      device.config = deviceConfigSchema.parse({
+        ...device.config,
+        ...(input.telemetryIntervalSec !== undefined ? { telemetryIntervalSec: input.telemetryIntervalSec } : {}),
+        ...(input.thresholds !== undefined ? { thresholds: input.thresholds } : {}),
+        ...(input.timerMethod !== undefined ? { timerMethod: input.timerMethod } : {})
+      });
+
+      return {
+        config: device.config,
+        version: 1
+      };
+    }
+
+    throw new Error("DEVICE_NOT_FOUND");
+  }
+
+  async markDeviceOffline(input: { deviceId: string; reason?: string | null }): Promise<boolean> {
+    for (const device of this.devices.values()) {
+      if (device.id !== input.deviceId) {
+        continue;
+      }
+
+      device.status = "OFFLINE";
+      device.lastSeenAt = new Date().toISOString();
+      return true;
+    }
+
+    return false;
+  }
+
   async createCode(input: {
     workspaceId: string;
     userId: string;
@@ -238,6 +303,7 @@ export class MemoryAuthService implements AuthService, WorkspaceService {
   private readonly users = new Map<string, MemoryUser>();
   private readonly usersByEmail = new Map<string, MemoryUser>();
   private readonly sessions = new Map<string, { userId: string; expiresAt: string }>();
+  private readonly passwordResets = new Map<string, { userId: string; expiresAt: string }>();
   private readonly memberships = new Map<string, WorkspaceMembership[]>();
 
   constructor() {
@@ -322,6 +388,51 @@ export class MemoryAuthService implements AuthService, WorkspaceService {
 
   async logout(token: string): Promise<void> {
     this.sessions.delete(token);
+  }
+
+  async requestPasswordReset(input: { email: string; expiresInSec?: number }) {
+    const user = this.usersByEmail.get(input.email);
+    if (!user) {
+      return { ok: true } as const;
+    }
+
+    const resetToken = `kori_pwd_${generateOpaqueToken(18)}`;
+    const expiresAt = new Date(Date.now() + (input.expiresInSec ?? 3600) * 1000).toISOString();
+    this.passwordResets.set(resetToken, {
+      userId: user.id,
+      expiresAt
+    });
+
+    return {
+      ok: true,
+      resetToken,
+      expiresAt
+    } as const;
+  }
+
+  async resetPassword(input: { token: string; password: string }): Promise<AuthSession | null> {
+    const reset = this.passwordResets.get(input.token);
+    if (!reset || Date.parse(reset.expiresAt) <= Date.now()) {
+      return null;
+    }
+
+    const user = this.users.get(reset.userId);
+    if (!user) {
+      return null;
+    }
+
+    user.passwordHash = hashPassword(input.password);
+    this.passwordResets.delete(input.token);
+    await this.invalidateSessionsForUser(user.id);
+    return this.createSession(user);
+  }
+
+  async invalidateSessionsForUser(userId: string): Promise<void> {
+    for (const [token, session] of this.sessions.entries()) {
+      if (session.userId === userId) {
+        this.sessions.delete(token);
+      }
+    }
   }
 
   async listForUser(userId: string): Promise<WorkspaceMembership[]> {

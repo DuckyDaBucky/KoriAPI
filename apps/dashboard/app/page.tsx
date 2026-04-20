@@ -1,5 +1,8 @@
-import Link from "next/link";
+import type { JobStatus, QuotaUsage } from "@kori/shared";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { LiveStream } from "@/components/live-stream";
 import { fetchJson } from "@/lib/api";
+import { requireDashboardSession } from "@/lib/auth";
 
 type Overview = {
   generatedAt: string;
@@ -16,109 +19,93 @@ type Overview = {
   };
 };
 
-async function getOverview(): Promise<Overview | null> {
-  const adminToken = process.env.KORI_ADMIN_API_KEY ?? process.env.ADMIN_API_KEY;
-  if (!adminToken) {
-    return null;
-  }
+async function getDashboardData(sessionToken: string) {
+  const headers = {
+    "x-kori-session": sessionToken
+  };
 
-  try {
-    return await fetchJson<Overview>("/v1/admin/overview", {
-      headers: {
-        "x-kori-admin-key": adminToken
-      }
-    });
-  } catch {
-    return null;
-  }
+  const [overview, quotas, jobs] = await Promise.all([
+    fetchJson<Overview>("/v1/admin/overview", { headers }),
+    fetchJson<QuotaUsage[]>("/v1/admin/quotas", { headers }),
+    fetchJson<JobStatus[]>("/v1/admin/jobs", { headers })
+  ]);
+
+  return { overview, quotas, jobs };
 }
 
 export default async function HomePage() {
-  const overview = await getOverview();
+  const { session, sessionToken } = await requireDashboardSession();
+  const { overview, quotas, jobs } = await getDashboardData(sessionToken);
+  const primaryWorkspace = session.user.workspaces[0];
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <p className="eyebrow">KoriAPI</p>
-          <h2>Control Plane</h2>
-          <p className="lede">Admin-only interface for devices, telemetry, auth, quotas, contracts, and integrations.</p>
+    <DashboardShell
+      title="Control plane overview"
+      description="Live service health, quota posture, queue pressure, and admin stream visibility for the staging stack."
+      session={session}
+    >
+      <div className="status-strip">
+        <div className="status-pill">
+          <strong>{overview.counts.devices}</strong>
+          <span className="meta">registered devices</span>
         </div>
-        <nav className="nav">
-          <Link href="/">Overview</Link>
-          <Link href="/login">Login</Link>
-          <a href="/contracts">Contracts</a>
-          <a href="/devices">Devices</a>
-          <a href="/telemetry">Telemetry</a>
-          <a href="/jobs">Jobs</a>
-          <a href="/integrations">Integrations</a>
-        </nav>
-      </aside>
-      <section className="content">
-        <div className="hero">
-          <div>
-            <p className="eyebrow">Production Admin</p>
-            <h1>Kori internal dashboard</h1>
-            <p className="lede">
-              This Next.js app replaces the old static console and is designed to front the same API and websocket
-              streams with server-rendered pages plus client live-panels.
-            </p>
-          </div>
-          <div className="panel">
-            <h3>Runtime target</h3>
-            <p className="meta">Next.js admin app + Fastify API + worker service + Terraform-managed AWS runtime</p>
-          </div>
+        <div className="status-pill">
+          <strong>{overview.counts.connectedDevices}</strong>
+          <span className="meta">connected devices</span>
         </div>
+        <div className="status-pill">
+          <strong>{overview.services.database}</strong>
+          <span className="meta">database health</span>
+        </div>
+        <div className="status-pill">
+          <strong>{overview.services.redis}</strong>
+          <span className="meta">redis health</span>
+        </div>
+      </div>
 
-        <div className="status-strip">
-          <div className="status-pill">
-            <strong>{overview?.counts.devices ?? "--"}</strong>
-            <span className="meta">registered devices</span>
-          </div>
-          <div className="status-pill">
-            <strong>{overview?.counts.connectedDevices ?? "--"}</strong>
-            <span className="meta">connected devices</span>
-          </div>
-          <div className="status-pill">
-            <strong>{overview?.services.database ?? "--"}</strong>
-            <span className="meta">database health</span>
-          </div>
-          <div className="status-pill">
-            <strong>{overview?.services.redis ?? "--"}</strong>
-            <span className="meta">redis health</span>
-          </div>
-        </div>
-
-        <div className="grid two">
-          <section className="panel">
-            <h2>Migration posture</h2>
-            <div className="data-list">
-              <div className="data-card">
-                <strong>Operator workflows preserved</strong>
-                <p className="meta">Provisioning, log inspection, contract browsing, quota visibility, and connector runs remain API-backed.</p>
-              </div>
-              <div className="data-card">
-                <strong>Server-first pages</strong>
-                <p className="meta">The dashboard uses App Router server rendering for initial data and client websocket panels for live state.</p>
-              </div>
+      <div className="grid two">
+        <section className="panel">
+          <h2>Workspace posture</h2>
+          <div className="data-list">
+            <div className="data-card">
+              <strong>{primaryWorkspace?.name ?? "No workspace"}</strong>
+              <p className="meta">Primary workspace for this operator session.</p>
             </div>
-          </section>
+            {quotas.map((quota) => (
+              <div key={quota.workspaceId} className="data-card">
+                <strong>{quota.workspaceId}</strong>
+                <p className="meta">
+                  {quota.deviceCount}/{quota.deviceLimit} devices, {quota.storageMbUsed}/{quota.storageMbLimit} MB
+                  storage
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <section className="panel">
-            <h2>Implementation status</h2>
-            <div className="data-list">
+        <section className="panel">
+          <h2>Queue posture</h2>
+          <div className="data-list">
+            {jobs.length === 0 ? (
               <div className="data-card">
-                <strong>Admin overview wired</strong>
-                <p className="meta">Reads the live API if `KORI_ADMIN_API_KEY` is present in the dashboard environment.</p>
+                <strong>No queued jobs</strong>
+                <p className="meta">Connector sync, Spotify refresh, rollups, and audit compaction are idle.</p>
               </div>
-              <div className="data-card">
-                <strong>Section shells created</strong>
-                <p className="meta">Contracts, devices, telemetry, jobs, and integrations sections are scaffolded for follow-on rendering work.</p>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-    </main>
+            ) : (
+              jobs.slice(0, 5).map((job) => (
+                <div key={job.id} className="data-card">
+                  <strong>{job.kind}</strong>
+                  <p className="meta">
+                    {job.status} · {job.workspaceId ?? "global"}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      <LiveStream title="Admin stream" stream="admin" sessionToken={sessionToken} />
+    </DashboardShell>
   );
 }

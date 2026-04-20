@@ -5,8 +5,8 @@ Platform control plane for Kori devices, live telemetry, admin observability, in
 ## Workspace
 
 - `apps/api`: Fastify API, device runtime, admin APIs, security/auth surfaces, contracts, and live session streams
-- `apps/dashboard`: Next.js App Router admin dashboard scaffold for the control plane
-- `apps/worker`: background worker scaffold for connector sync, telemetry rollups, recommendation fanout, and Spotify refresh
+- `apps/dashboard`: Next.js App Router admin dashboard with cookie-backed session auth
+- `apps/worker`: background worker for connector sync, telemetry rollups, recommendation fanout, audit compaction, and Spotify refresh
 - `packages/shared`: shared REST and WebSocket contracts
 - `packages/db`: Drizzle schema, seed script, and Neon database client
 - `docs/device`: ESP32 integration and protocol handoff documentation
@@ -22,11 +22,12 @@ Platform control plane for Kori devices, live telemetry, admin observability, in
 - device token rotation and config retrieval
 - admin-only overview, logs, audit, and provisioning APIs
 - MFA enrollment/verification/disable flows
+- password reset request and reset flows
 - invitations and service tokens
 - connector config and connector run APIs
+- admin device revoke, reprovision, config update, and mark-offline actions
 - admin jobs, quotas, and generated contract endpoints
-- live developer dashboard at `/admin/dashboard`
-- Next.js dashboard scaffold in `apps/dashboard`
+- authenticated Next.js dashboard in `apps/dashboard`
 - Spotify ambient presence integration scaffolding
 - audit trail and observability event stream foundations
 
@@ -35,10 +36,11 @@ Platform control plane for Kori devices, live telemetry, admin observability, in
 Copy [apps/api/.env.example](/c:/Users/hasna/Documents/KoriAPI/apps/api/.env.example) to `apps/api/.env` or `.env` at the repo root and fill in the values.
 
 Important variables:
-- `ADMIN_API_KEY`: admin access for `/v1/admin/*` and the dashboard
+- `ADMIN_API_KEY`: admin access for emergency `/v1/admin/*` operations
 - `APP_ENCRYPTION_KEY`: encryption key for protected integration secrets
 - `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`: Spotify presence integration
 - `SEED_USER_EMAIL`, `SEED_USER_PASSWORD`: local auth bootstrap account for login-backed dashboard access
+- `WORKER_POLL_INTERVAL_MS`: worker queue polling interval
 
 ## Commands
 

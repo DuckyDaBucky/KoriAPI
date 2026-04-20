@@ -610,3 +610,123 @@ test("security, connector, job, quota, and generated contract routes work", asyn
 
   await app.close();
 });
+
+test("password reset flow returns a preview token in test mode and creates a new session", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const forgot = await app.inject({
+    method: "POST",
+    url: "/v1/auth/password/forgot",
+    payload: {
+      email: "owner@example.com"
+    }
+  });
+  assert.equal(forgot.statusCode, 200);
+  const forgotBody = forgot.json();
+  assert.equal(forgotBody.ok, true);
+  assert.ok(typeof forgotBody.resetToken === "string");
+
+  const reset = await app.inject({
+    method: "POST",
+    url: "/v1/auth/password/reset",
+    payload: {
+      token: forgotBody.resetToken,
+      password: "ChangeMe456!"
+    }
+  });
+  assert.equal(reset.statusCode, 200);
+  assert.ok(typeof reset.json().sessionToken === "string");
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe456!"
+    }
+  });
+  assert.equal(login.statusCode, 200);
+
+  await app.close();
+});
+
+test("admin device actions revoke, reprovision, update config, and mark offline", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
+  const bootstrap = await app.inject({
+    method: "POST",
+    url: "/v1/device/bootstrap",
+    payload: {
+      hardwareId: "22:33:44:55:66:77",
+      userApiKey: "dev-user-api-key",
+      deviceName: "Kori-Admin",
+      firmwareVersion: "0.5.0"
+    }
+  });
+  const deviceId = bootstrap.json().deviceId as string;
+
+  const configUpdate = await app.inject({
+    method: "POST",
+    url: `/v1/admin/devices/${deviceId}/config`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      telemetryIntervalSec: 5,
+      timerMethod: "focus"
+    }
+  });
+  assert.equal(configUpdate.statusCode, 200);
+  assert.equal(configUpdate.json().action, "config_update");
+
+  const revoke = await app.inject({
+    method: "POST",
+    url: `/v1/admin/devices/${deviceId}/revoke`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      reason: "rotation"
+    }
+  });
+  assert.equal(revoke.statusCode, 200);
+
+  const reprovision = await app.inject({
+    method: "POST",
+    url: `/v1/admin/devices/${deviceId}/reprovision`,
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(reprovision.statusCode, 200);
+  assert.ok(typeof reprovision.json().deviceToken === "string");
+
+  const offline = await app.inject({
+    method: "POST",
+    url: `/v1/admin/devices/${deviceId}/mark-offline`,
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      reason: "maintenance"
+    }
+  });
+  assert.equal(offline.statusCode, 200);
+  assert.equal(offline.json().action, "mark_offline");
+
+  await app.close();
+});

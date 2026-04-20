@@ -3,6 +3,8 @@ import {
   adminContractsSchema,
   adminOverviewSchema,
   contractDocumentSchema,
+  deviceAdminActionRequestSchema,
+  deviceAdminActionResponseSchema,
   deviceLiveStateSchema,
   developerLogEventSchema,
   jobStatusSchema,
@@ -116,6 +118,156 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
         activeRuleTypes: liveStateMap.get(device.id)?.activeRuleTypes ?? []
       })
     );
+  });
+
+  app.post("/v1/admin/devices/:id/revoke", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const deviceId = (request.params as { id: string }).id;
+    const body = deviceAdminActionRequestSchema.parse(request.body ?? {});
+    const revoked = await app.services.deviceRegistryService.revokeDevice({
+      deviceId,
+      reason: body.reason ?? null
+    });
+    if (!revoked) {
+      return reply.code(404).send({
+        error: {
+          code: "DEVICE_NOT_FOUND",
+          message: "Device was not found"
+        }
+      });
+    }
+
+    await app.services.auditService.record({
+      action: "device.revoke",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "device",
+      resourceId: deviceId,
+      metadata: {
+        reason: body.reason ?? null
+      }
+    });
+
+    return deviceAdminActionResponseSchema.parse({
+      ok: true,
+      deviceId,
+      action: "revoke"
+    });
+  });
+
+  app.post("/v1/admin/devices/:id/reprovision", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const deviceId = (request.params as { id: string }).id;
+    const reprovisioned = await app.services.deviceRegistryService.reprovisionDevice({ deviceId });
+
+    await app.services.auditService.record({
+      action: "device.reprovision",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "device",
+      resourceId: deviceId,
+      metadata: {
+        expiresAt: reprovisioned.expiresAt
+      }
+    });
+
+    return deviceAdminActionResponseSchema.parse({
+      ok: true,
+      deviceId,
+      action: "reprovision",
+      deviceToken: reprovisioned.token,
+      expiresAt: reprovisioned.expiresAt,
+      rotatedAt: reprovisioned.rotatedAt
+    });
+  });
+
+  app.post("/v1/admin/devices/:id/config", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const deviceId = (request.params as { id: string }).id;
+    const body = deviceAdminActionRequestSchema.parse(request.body ?? {});
+    const result = await app.services.deviceRegistryService.updateDeviceConfig({
+      deviceId,
+      ...(body.telemetryIntervalSec !== undefined ? { telemetryIntervalSec: body.telemetryIntervalSec } : {}),
+      ...(body.thresholds !== undefined ? { thresholds: body.thresholds } : {}),
+      ...(body.timerMethod !== undefined ? { timerMethod: body.timerMethod } : {})
+    });
+
+    await app.services.auditService.record({
+      action: "device.config_update",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "device_config",
+      resourceId: deviceId,
+      metadata: {
+        configVersion: result.version
+      }
+    });
+
+    return deviceAdminActionResponseSchema.parse({
+      ok: true,
+      deviceId,
+      action: "config_update",
+      configVersion: result.version
+    });
+  });
+
+  app.post("/v1/admin/devices/:id/mark-offline", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const deviceId = (request.params as { id: string }).id;
+    const body = deviceAdminActionRequestSchema.parse(request.body ?? {});
+    const marked = await app.services.deviceRegistryService.markDeviceOffline({
+      deviceId,
+      reason: body.reason ?? null
+    });
+    if (!marked) {
+      return reply.code(404).send({
+        error: {
+          code: "DEVICE_NOT_FOUND",
+          message: "Device was not found"
+        }
+      });
+    }
+
+    await app.services.auditService.record({
+      action: "device.mark_offline",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "device",
+      resourceId: deviceId,
+      metadata: {
+        reason: body.reason ?? null
+      }
+    });
+
+    return deviceAdminActionResponseSchema.parse({
+      ok: true,
+      deviceId,
+      action: "mark_offline"
+    });
   });
 
   app.post("/v1/admin/provisioning-codes", async (request, reply) => {

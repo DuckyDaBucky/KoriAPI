@@ -5,6 +5,7 @@ import type {
   ConnectorConfig,
   ConnectorRun,
   Deadline,
+  DashboardView,
   DeviceConfig,
   DeviceLiveState,
   DeveloperLogEvent,
@@ -95,6 +96,15 @@ export interface DeviceRegistryService {
   listDevices(): Promise<DeviceRegistryRecord[]>;
   rotateToken(input: { deviceId: string }): Promise<{ token: string; expiresAt: string; rotatedAt: string }>;
   getDeviceConfig(deviceId: string): Promise<DeviceConfig>;
+  revokeDevice(input: { deviceId: string; reason?: string | null }): Promise<boolean>;
+  reprovisionDevice(input: { deviceId: string }): Promise<{ token: string; expiresAt: string; rotatedAt: string }>;
+  updateDeviceConfig(input: {
+    deviceId: string;
+    telemetryIntervalSec?: number;
+    thresholds?: DeviceConfig["thresholds"];
+    timerMethod?: string;
+  }): Promise<{ config: DeviceConfig; version: number }>;
+  markDeviceOffline(input: { deviceId: string; reason?: string | null }): Promise<boolean>;
 }
 
 export interface HealthService {
@@ -230,6 +240,13 @@ export interface AuthService {
   login(input: { email: string; password: string }): Promise<AuthSession | null>;
   getSession(token: string): Promise<AuthSession | null>;
   logout(token: string): Promise<void>;
+  requestPasswordReset(input: { email: string; expiresInSec?: number }): Promise<{
+    ok: boolean;
+    resetToken?: string;
+    expiresAt?: string;
+  }>;
+  resetPassword(input: { token: string; password: string }): Promise<AuthSession | null>;
+  invalidateSessionsForUser(userId: string): Promise<void>;
 }
 
 export interface SecurityService {
@@ -368,4 +385,14 @@ export interface TelemetryService {
     latest: TelemetryLatest[];
   }>;
   enableTimescaleSupport(): Promise<{ enabled: boolean; message: string }>;
+}
+
+export interface DashboardViewsService {
+  listViews(input: { workspaceIds?: string[]; userId?: string | null }): Promise<DashboardView[]>;
+  saveView(input: {
+    workspaceId: string;
+    userId?: string | null;
+    name: string;
+    filters: Record<string, unknown>;
+  }): Promise<DashboardView>;
 }
