@@ -80,7 +80,10 @@ export const sessions = pgTable("sessions", {
 export const mfaFactors = pgTable("mfa_factors", {
   id: varchar("id", { length: 64 }).primaryKey(),
   type: varchar("type", { length: 32 }).notNull(),
+  label: varchar("label", { length: 120 }),
   secretEnc: text("secret_enc").notNull(),
+  backupCodesEnc: text("backup_codes_enc"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   userId: varchar("user_id", { length: 64 })
     .notNull()
@@ -93,7 +96,23 @@ export const serviceTokens = pgTable("service_tokens", {
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   workspaceId: varchar("workspace_id", { length: 64 }).references(() => workspaces.id, { onDelete: "cascade" })
+});
+
+export const invitations = pgTable("invitations", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  role: workspaceRoleEnum("role").notNull(),
+  status: varchar("status", { length: 32 }).default("pending").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  workspaceId: varchar("workspace_id", { length: 64 })
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  invitedByUserId: varchar("invited_by_user_id", { length: 64 }).references(() => users.id, { onDelete: "set null" })
 });
 
 export const userApiKeys = pgTable("user_api_keys", {
@@ -157,11 +176,22 @@ export const deviceConfigs = pgTable("device_configs", {
   telemetryIntervalSec: integer("telemetry_interval_sec").default(2).notNull(),
   thresholds: jsonb("thresholds").$type<DeviceThresholds>().notNull(),
   timerMethod: varchar("timer_method", { length: 64 }).default("pomodoro").notNull(),
+  version: integer("version").default(1).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   deviceId: varchar("device_id", { length: 64 })
     .notNull()
     .unique()
+    .references(() => devices.id, { onDelete: "cascade" })
+});
+
+export const deviceConfigVersions = pgTable("device_config_versions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  version: integer("version").notNull(),
+  config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  deviceId: varchar("device_id", { length: 64 })
+    .notNull()
     .references(() => devices.id, { onDelete: "cascade" })
 });
 
@@ -335,6 +365,36 @@ export const connectorRuns = pgTable("connector_runs", {
     .references(() => workspaces.id, { onDelete: "cascade" })
 });
 
+export const workerJobs = pgTable("worker_jobs", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  kind: varchar("kind", { length: 64 }).notNull(),
+  status: varchar("status", { length: 32 }).default("queued").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  workspaceId: varchar("workspace_id", { length: 64 }).references(() => workspaces.id, { onDelete: "cascade" })
+});
+
+export const temporalEvents = pgTable("temporal_events", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  type: varchar("type", { length: 64 }).notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  workspaceId: varchar("workspace_id", { length: 64 }).references(() => workspaces.id, { onDelete: "set null" }),
+  userId: varchar("user_id", { length: 64 }).references(() => users.id, { onDelete: "set null" }),
+  deviceId: varchar("device_id", { length: 64 }).references(() => devices.id, { onDelete: "set null" })
+});
+
+export const temporalSignals = pgTable("temporal_signals", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  type: varchar("type", { length: 64 }).notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  workspaceId: varchar("workspace_id", { length: 64 }).references(() => workspaces.id, { onDelete: "set null" }),
+  userId: varchar("user_id", { length: 64 }).references(() => users.id, { onDelete: "set null" })
+});
+
 export const spotifyConnections = pgTable("spotify_connections", {
   id: varchar("id", { length: 64 }).primaryKey(),
   spotifyUserId: varchar("spotify_user_id", { length: 128 }),
@@ -419,11 +479,13 @@ export const dbTables = {
   sessions,
   mfaFactors,
   serviceTokens,
+  invitations,
   userApiKeys,
   deviceProvisioningCodes,
   devices,
   deviceTokens,
   deviceConfigs,
+  deviceConfigVersions,
   sensorSamples,
   notifications,
   notificationEvents,
@@ -436,8 +498,11 @@ export const dbTables = {
   recommendations,
   connectorConfigs,
   connectorRuns,
+  workerJobs,
   spotifyConnections,
   spotifyPresenceEvents,
+  temporalEvents,
+  temporalSignals,
   dashboardViews,
   logIngestionOffsets
 };

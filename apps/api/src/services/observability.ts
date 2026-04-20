@@ -5,6 +5,7 @@ import type {
   AuditService,
   ObservabilityService,
 } from "./types.js";
+import { redactSensitive } from "../utils/crypto.js";
 
 export class MemoryAuditService implements AuditService {
   private readonly events: AuditEvent[] = [];
@@ -15,7 +16,8 @@ export class MemoryAuditService implements AuditService {
     const entry: AuditEvent = {
       ...event,
       id: `audit_${randomUUID().replaceAll("-", "")}`,
-      createdAt: event.createdAt ?? new Date().toISOString()
+      createdAt: event.createdAt ?? new Date().toISOString(),
+      metadata: redactSensitive(event.metadata)
     };
     this.events.unshift(entry);
     this.events.splice(200);
@@ -40,7 +42,8 @@ export class MemoryObservabilityService implements ObservabilityService {
     const entry: DeveloperLogEvent = {
       ...event,
       id: `log_${randomUUID().replaceAll("-", "")}`,
-      createdAt: event.createdAt ?? new Date().toISOString()
+      createdAt: event.createdAt ?? new Date().toISOString(),
+      metadata: redactSensitive(event.metadata)
     };
     this.logs.unshift(entry);
     this.logs.splice(500);

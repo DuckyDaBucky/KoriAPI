@@ -432,3 +432,181 @@ test("admin contracts and filtered logs endpoints are available", async () => {
 
   await app.close();
 });
+
+test("security, connector, job, quota, and generated contract routes work", async () => {
+  const app = await buildServer({
+    env: baseEnv
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
+  const enroll = await app.inject({
+    method: "POST",
+    url: "/v1/auth/mfa/enroll",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      type: "totp",
+      label: "primary"
+    }
+  });
+  assert.equal(enroll.statusCode, 200);
+  const enrollBody = enroll.json();
+
+  const verify = await app.inject({
+    method: "POST",
+    url: "/v1/auth/mfa/verify",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      factorId: enrollBody.factor.id,
+      code: enrollBody.backupCodes[0]
+    }
+  });
+  assert.equal(verify.statusCode, 200);
+
+  const disable = await app.inject({
+    method: "POST",
+    url: "/v1/auth/mfa/disable",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      factorId: enrollBody.factor.id
+    }
+  });
+  assert.equal(disable.statusCode, 200);
+
+  const invitation = await app.inject({
+    method: "POST",
+    url: "/v1/auth/invitations",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      email: "owner@example.com",
+      workspaceId: "ws_dev",
+      role: "member",
+      expiresInSec: 600
+    }
+  });
+  assert.equal(invitation.statusCode, 201);
+  const invitationToken = invitation.json().token as string;
+
+  const acceptInvitation = await app.inject({
+    method: "POST",
+    url: "/v1/auth/invitations/test/accept",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      token: invitationToken
+    }
+  });
+  assert.equal(acceptInvitation.statusCode, 200);
+  assert.equal(acceptInvitation.json().status, "accepted");
+
+  const serviceToken = await app.inject({
+    method: "POST",
+    url: "/v1/service-tokens",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      label: "worker-access",
+      workspaceId: "ws_dev"
+    }
+  });
+  assert.equal(serviceToken.statusCode, 201);
+  assert.ok(typeof serviceToken.json().rawToken === "string");
+
+  const connectorConfig = await app.inject({
+    method: "POST",
+    url: "/v1/connectors/configs",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      provider: "crossref",
+      workspaceId: "ws_dev",
+      config: {
+        apiKey: "top-secret-value"
+      }
+    }
+  });
+  assert.equal(connectorConfig.statusCode, 200);
+
+  const connectorRun = await app.inject({
+    method: "POST",
+    url: "/v1/connectors/runs",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      provider: "crossref",
+      workspaceId: "ws_dev"
+    }
+  });
+  assert.equal(connectorRun.statusCode, 201);
+
+  const jobs = await app.inject({
+    method: "GET",
+    url: "/v1/admin/jobs",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(jobs.statusCode, 200);
+  assert.ok(jobs.json().length >= 1);
+
+  const quotas = await app.inject({
+    method: "GET",
+    url: "/v1/admin/quotas",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(quotas.statusCode, 200);
+  assert.equal(quotas.json()[0].workspaceId, "ws_dev");
+
+  const openapi = await app.inject({
+    method: "GET",
+    url: "/v1/admin/contracts/openapi.json",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(openapi.statusCode, 200);
+  assert.equal(openapi.json().openapi, "3.1.0");
+
+  const asyncapi = await app.inject({
+    method: "GET",
+    url: "/v1/admin/contracts/asyncapi.json",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(asyncapi.statusCode, 200);
+  assert.equal(asyncapi.json().asyncapi, "3.0.0");
+
+  const logs = await app.inject({
+    method: "GET",
+    url: "/v1/admin/logs?integration=crossref",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(logs.statusCode, 200);
+
+  await app.close();
+});

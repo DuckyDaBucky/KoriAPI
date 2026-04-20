@@ -1,0 +1,70 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "KoriAPI Realtime Contracts",
+    "version": "0.2.0"
+  },
+  "channels": {
+    "/v1/ws/device": {
+      "address": "/v1/ws/device",
+      "messages": {
+        "device:hello": {
+          "name": "device:hello"
+        },
+        "device:sensors": {
+          "name": "device:sensors"
+        },
+        "device:health": {
+          "name": "device:health"
+        },
+        "device:notification_event": {
+          "name": "device:notification_event"
+        },
+        "pong": {
+          "name": "pong"
+        },
+        "notification:show": {
+          "name": "notification:show"
+        },
+        "time:sync": {
+          "name": "time:sync"
+        }
+      }
+    },
+    "/v1/ws/session": {
+      "address": "/v1/ws/session",
+      "messages": {
+        "session:ready": {
+          "name": "session:ready"
+        },
+        "admin:ready": {
+          "name": "admin:ready"
+        },
+        "admin:log": {
+          "name": "admin:log"
+        },
+        "admin:device_state": {
+          "name": "admin:device_state"
+        },
+        "admin:audit": {
+          "name": "admin:audit"
+        },
+        "admin:spotify_presence": {
+          "name": "admin:spotify_presence"
+        },
+        "admin:overview": {
+          "name": "admin:overview"
+        },
+        "recommendation:show": {
+          "name": "recommendation:show"
+        },
+        "spotify:state": {
+          "name": "spotify:state"
+        },
+        "ping": {
+          "name": "ping"
+        }
+      }
+    }
+  }
+}

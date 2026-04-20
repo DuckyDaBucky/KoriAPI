@@ -61,7 +61,8 @@ export async function requireAdminSession(
   if (isAdminAuthorized(token, request.server.config)) {
     return {
       role: "platform_admin",
-      actorId: "admin_api_key"
+      actorId: "admin_api_key",
+      workspaceIds: []
     };
   }
 
@@ -100,8 +101,31 @@ export async function requireAdminSession(
 
   return {
     role,
-    actorId: session.user.id
+    actorId: session.user.id,
+    workspaceIds: session.user.workspaces.map((workspace) => workspace.id)
   };
+}
+
+export function ensureAdminWorkspaceAccess(
+  adminSession: AdminSession,
+  workspaceId: string,
+  reply: FastifyReply
+): boolean {
+  if (adminSession.role === "platform_admin" || adminSession.actorId === "admin_api_key") {
+    return true;
+  }
+
+  if (adminSession.workspaceIds.includes(workspaceId)) {
+    return true;
+  }
+
+  reply.code(403).send({
+    error: {
+      code: "FORBIDDEN_WORKSPACE",
+      message: "Admin does not have access to that workspace"
+    }
+  });
+  return false;
 }
 
 export async function requireUserSession(

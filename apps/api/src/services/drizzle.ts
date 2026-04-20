@@ -11,7 +11,7 @@ import type {
 } from "@kori/shared";
 import { deviceConfigSchema } from "@kori/shared";
 import { randomUUID } from "node:crypto";
-import { generateOpaqueToken, hashPassword, sha256, verifyPassword } from "../utils/crypto.js";
+import { generateOpaqueToken, hashPassword, redactSensitive, sha256, verifyPassword } from "../utils/crypto.js";
 import { evaluateRules } from "./rules.js";
 import type {
   AdminStreamEvent,
@@ -565,7 +565,7 @@ export class DrizzleAuditService implements AuditService {
       actorId: event.actorId,
       resourceType: event.resourceType,
       resourceId: event.resourceId,
-      metadata: event.metadata,
+      metadata: redactSensitive(event.metadata),
       createdAt,
       workspaceId: event.workspaceId,
       userId: event.userId
@@ -574,7 +574,8 @@ export class DrizzleAuditService implements AuditService {
     const auditEvent = {
       ...event,
       id,
-      createdAt: createdAt.toISOString()
+      createdAt: createdAt.toISOString(),
+      metadata: redactSensitive(event.metadata)
     };
 
     if (this.observabilityService) {

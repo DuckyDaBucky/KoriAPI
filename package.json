@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @kori/shared && npm run build --workspace @kori/db && npm run build --workspace @kori/api",
+    "contracts:generate": "npm run build && node scripts/generate-contracts.mjs",
     "dev": "npm run dev --workspace @kori/api",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

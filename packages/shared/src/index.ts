@@ -70,6 +70,155 @@ export const authSessionResponseSchema = z.object({
 });
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
 
+export const mfaFactorSchema = z.object({
+  id: z.string(),
+  type: z.enum(["totp"]),
+  label: z.string().nullable(),
+  verified: z.boolean(),
+  createdAt: z.string().datetime()
+});
+export type MfaFactor = z.infer<typeof mfaFactorSchema>;
+
+export const mfaEnrollRequestSchema = z.object({
+  type: z.enum(["totp"]).default("totp"),
+  label: z.string().min(1).max(120).optional()
+});
+
+export const mfaEnrollResponseSchema = z.object({
+  factor: mfaFactorSchema,
+  secret: z.string(),
+  otpauthUrl: z.string().url(),
+  backupCodes: z.array(z.string())
+});
+
+export const mfaVerifyRequestSchema = z.object({
+  factorId: z.string(),
+  code: z.string().min(6).max(8)
+});
+
+export const invitationSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  workspaceId: z.string(),
+  role: workspaceRoleSchema,
+  status: z.enum(["pending", "accepted", "revoked", "expired"]),
+  createdAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  acceptedAt: z.string().datetime().nullable()
+});
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export const invitationCreateRequestSchema = z.object({
+  email: z.string().email(),
+  workspaceId: z.string(),
+  role: z.enum(["workspace_admin", "member", "service"]).default("member"),
+  expiresInSec: z.number().int().positive().max(60 * 60 * 24 * 30).default(60 * 60 * 24 * 7)
+});
+
+export const invitationCreateResponseSchema = z.object({
+  invitation: invitationSchema,
+  token: z.string()
+});
+
+export const invitationAcceptRequestSchema = z.object({
+  token: z.string().min(8)
+});
+
+export const serviceTokenSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  workspaceId: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  lastUsedAt: z.string().datetime().nullable().default(null)
+});
+export type ServiceToken = z.infer<typeof serviceTokenSchema>;
+
+export const serviceTokenCreateRequestSchema = z.object({
+  label: z.string().min(1).max(120),
+  workspaceId: z.string().optional()
+});
+
+export const serviceTokenCreateResponseSchema = z.object({
+  serviceToken: serviceTokenSchema,
+  rawToken: z.string()
+});
+
+export const quotaUsageSchema = z.object({
+  workspaceId: z.string(),
+  storageMbLimit: z.number().int().nonnegative(),
+  storageMbUsed: z.number().nonnegative(),
+  deviceLimit: z.number().int().nonnegative(),
+  deviceCount: z.number().int().nonnegative(),
+  monthlyAiTokensLimit: z.number().int().nonnegative(),
+  monthlyAiTokensUsed: z.number().int().nonnegative()
+});
+export type QuotaUsage = z.infer<typeof quotaUsageSchema>;
+
+export const connectorConfigSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  workspaceId: z.string(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export type ConnectorConfig = z.infer<typeof connectorConfigSchema>;
+
+export const connectorConfigRequestSchema = z.object({
+  provider: z.string().min(1).max(64),
+  workspaceId: z.string(),
+  config: z.record(z.string(), z.unknown())
+});
+
+export const connectorRunSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  workspaceId: z.string(),
+  status: z.string(),
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable(),
+  metadata: z.record(z.string(), z.unknown())
+});
+export type ConnectorRun = z.infer<typeof connectorRunSchema>;
+
+export const connectorRunRequestSchema = z.object({
+  provider: z.string().min(1).max(64),
+  workspaceId: z.string()
+});
+
+export const jobStatusSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  workspaceId: z.string().nullable(),
+  status: z.enum(["queued", "running", "succeeded", "failed"]),
+  createdAt: z.string().datetime(),
+  startedAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  metadata: z.record(z.string(), z.unknown())
+});
+export type JobStatus = z.infer<typeof jobStatusSchema>;
+
+export const temporalEventSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  workspaceId: z.string().nullable(),
+  userId: z.string().nullable(),
+  deviceId: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  metadata: z.record(z.string(), z.unknown())
+});
+export type TemporalEvent = z.infer<typeof temporalEventSchema>;
+
+export const temporalSignalSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  workspaceId: z.string().nullable(),
+  userId: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  payload: z.record(z.string(), z.unknown())
+});
+export type TemporalSignal = z.infer<typeof temporalSignalSchema>;
+
 export const noteSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -484,6 +633,18 @@ export const adminContractsSchema = z.object({
     outboundTypes: z.array(z.string())
   }),
   sharedSchemas: z.array(z.string())
+});
+
+export const contractDocumentSchema = z.object({
+  openapi: z.string().optional(),
+  asyncapi: z.string().optional(),
+  info: z.object({
+    title: z.string(),
+    version: z.string()
+  }),
+  paths: z.record(z.string(), z.unknown()).optional(),
+  channels: z.record(z.string(), z.unknown()).optional(),
+  components: z.record(z.string(), z.unknown()).optional()
 });
 
 export const spotifyConnectionStatusSchema = z.object({

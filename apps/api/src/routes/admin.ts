@@ -2,14 +2,17 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   adminContractsSchema,
   adminOverviewSchema,
+  contractDocumentSchema,
   deviceLiveStateSchema,
   developerLogEventSchema,
+  jobStatusSchema,
   provisioningCodeRequestSchema,
   provisioningCodeResponseSchema,
-  telemetryOverviewSchema,
-  wsEventTypes
+  quotaUsageSchema,
+  telemetryOverviewSchema
 } from "@kori/shared";
 import { requireAdminSession } from "../utils/admin-auth.js";
+import { buildAsyncApiDocument, buildContractsManifest, buildOpenApiDocument } from "../contracts.js";
 
 const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/admin/overview", async (request, reply) => {
@@ -189,148 +192,47 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    return adminContractsSchema.parse({
-      generatedAt: new Date().toISOString(),
-      rest: [
-        {
-          method: "GET",
-          path: "/health",
-          auth: "public",
-          summary: "Service health for database and Redis"
-        },
-        {
-          method: "POST",
-          path: "/v1/auth/login",
-          auth: "public",
-          summary: "Create a human session token"
-        },
-        {
-          method: "GET",
-          path: "/v1/workspaces",
-          auth: "session",
-          summary: "List workspaces available to the signed-in user"
-        },
-        {
-          method: "POST",
-          path: "/v1/device/bootstrap",
-          auth: "public",
-          summary: "Provision a device via provisioning code or legacy API key"
-        },
-        {
-          method: "GET",
-          path: "/v1/device/config",
-          auth: "device",
-          summary: "Fetch the active device-safe configuration payload"
-        },
-        {
-          method: "POST",
-          path: "/v1/device/token/rotate",
-          auth: "device",
-          summary: "Rotate the active device token"
-        },
-        {
-          method: "GET",
-          path: "/v1/notes",
-          auth: "session",
-          summary: "List notes visible to the current user"
-        },
-        {
-          method: "PATCH",
-          path: "/v1/notes/:noteId",
-          auth: "session",
-          summary: "Update note title, type, or content and append a revision when content changes"
-        },
-        {
-          method: "GET",
-          path: "/v1/deadlines",
-          auth: "session",
-          summary: "List workspace deadlines visible to the current user"
-        },
-        {
-          method: "PATCH",
-          path: "/v1/deadlines/:deadlineId",
-          auth: "session",
-          summary: "Update due date, metadata, or deadline status"
-        },
-        {
-          method: "GET",
-          path: "/v1/recommendations",
-          auth: "session",
-          summary: "List user or workspace recommendations"
-        },
-        {
-          method: "PATCH",
-          path: "/v1/recommendations/:recommendationId",
-          auth: "session",
-          summary: "Update recommendation fields or mark delivery state"
-        },
-        {
-          method: "GET",
-          path: "/v1/admin/overview",
-          auth: "admin",
-          summary: "Top-level operational health and counts"
-        },
-        {
-          method: "GET",
-          path: "/v1/admin/logs",
-          auth: "admin",
-          summary: "Filtered structured log stream for operator analysis"
-        },
-        {
-          method: "GET",
-          path: "/v1/admin/contracts",
-          auth: "admin",
-          summary: "Manual contract/debug manifest for dashboard iteration"
-        },
-        {
-          method: "POST",
-          path: "/v1/integrations/spotify/presence",
-          auth: "admin",
-          summary: "Refresh sanitized Spotify presence for a linked user"
-        }
-      ],
-      websocket: {
-        devicePath: "/v1/ws/device",
-        sessionPath: "/v1/ws/session",
-        inboundTypes: [
-          wsEventTypes.deviceHello,
-          wsEventTypes.deviceSensors,
-          wsEventTypes.deviceHealth,
-          wsEventTypes.deviceNotificationEvent,
-          wsEventTypes.pong
-        ],
-        outboundTypes: [
-          wsEventTypes.sessionReady,
-          wsEventTypes.adminReady,
-          wsEventTypes.adminLog,
-          wsEventTypes.adminDeviceState,
-          wsEventTypes.adminAudit,
-          wsEventTypes.adminSpotifyPresence,
-          wsEventTypes.adminOverview,
-          wsEventTypes.notificationShow,
-          wsEventTypes.recommendationShow,
-          wsEventTypes.spotifyState,
-          wsEventTypes.timeSync,
-          wsEventTypes.ping
-        ]
-      },
-      sharedSchemas: [
-        "Workspace",
-        "AuthUser",
-        "DeviceConfig",
-        "ProvisioningCode",
-        "Note",
-        "NoteRevision",
-        "Deadline",
-        "Recommendation",
-        "TelemetryBucket",
-        "TelemetryLatest",
-        "DeveloperLogEvent",
-        "DeviceLiveState",
-        "SpotifyPresence",
-        "ErrorEnvelope"
-      ]
-    });
+    return adminContractsSchema.parse(buildContractsManifest());
+  });
+
+  app.get("/v1/admin/contracts/openapi.json", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    return contractDocumentSchema.parse(buildOpenApiDocument());
+  });
+
+  app.get("/v1/admin/contracts/asyncapi.json", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    return contractDocumentSchema.parse(buildAsyncApiDocument());
+  });
+
+  app.get("/v1/admin/jobs", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const jobs = await app.services.jobsService.listJobs(100);
+    return jobs.map((job) => jobStatusSchema.parse(job));
+  });
+
+  app.get("/v1/admin/quotas", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const usage = await app.services.quotasService.listUsage(
+      adminSession.role === "workspace_admin" ? { workspaceIds: adminSession.workspaceIds } : {}
+    );
+    return usage.map((entry) => quotaUsageSchema.parse(entry));
   });
 };
 

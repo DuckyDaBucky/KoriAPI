@@ -1,0 +1,1055 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KoriAPI",
+    "version": "0.2.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Service health",
+        "tags": [
+          "core"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "summary": "Register a new account",
+        "tags": [
+          "auth"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "summary": "Create a session",
+        "tags": [
+          "auth"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "summary": "Resolve the current session",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "summary": "Logout the current session",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa/enroll": {
+      "post": {
+        "summary": "Enroll a TOTP MFA factor",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa/verify": {
+      "post": {
+        "summary": "Verify an enrolled MFA factor",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/mfa/disable": {
+      "post": {
+        "summary": "Disable an MFA factor",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/invitations": {
+      "get": {
+        "summary": "List invitations",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a workspace invitation",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/auth/invitations/{id}/accept": {
+      "post": {
+        "summary": "Accept an invitation token",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/service-tokens": {
+      "get": {
+        "summary": "List service tokens",
+        "tags": [
+          "service-tokens"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a service token",
+        "tags": [
+          "service-tokens"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/service-tokens/{id}": {
+      "delete": {
+        "summary": "Revoke a service token",
+        "tags": [
+          "service-tokens"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/workspaces": {
+      "get": {
+        "summary": "List workspaces",
+        "tags": [
+          "workspaces"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/device/bootstrap": {
+      "post": {
+        "summary": "Bootstrap a device",
+        "tags": [
+          "device"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/device/token/rotate": {
+      "post": {
+        "summary": "Rotate device token",
+        "tags": [
+          "device"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "device"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/device/config": {
+      "get": {
+        "summary": "Fetch device config",
+        "tags": [
+          "device"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "device"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/notes": {
+      "get": {
+        "summary": "List notes",
+        "tags": [
+          "notes"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a note",
+        "tags": [
+          "notes"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/notes/{noteId}": {
+      "patch": {
+        "summary": "Update a note",
+        "tags": [
+          "notes"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a note",
+        "tags": [
+          "notes"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/deadlines": {
+      "get": {
+        "summary": "List deadlines",
+        "tags": [
+          "deadlines"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a deadline",
+        "tags": [
+          "deadlines"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/deadlines/{deadlineId}": {
+      "patch": {
+        "summary": "Update a deadline",
+        "tags": [
+          "deadlines"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a deadline",
+        "tags": [
+          "deadlines"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/recommendations": {
+      "get": {
+        "summary": "List recommendations",
+        "tags": [
+          "recommendations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a recommendation",
+        "tags": [
+          "recommendations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/recommendations/{recommendationId}": {
+      "patch": {
+        "summary": "Update a recommendation",
+        "tags": [
+          "recommendations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a recommendation",
+        "tags": [
+          "recommendations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "session"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/connectors/configs": {
+      "get": {
+        "summary": "List connector configs",
+        "tags": [
+          "connectors"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create or update connector config",
+        "tags": [
+          "connectors"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/connectors/runs": {
+      "get": {
+        "summary": "List connector runs",
+        "tags": [
+          "connectors"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "summary": "Trigger connector run",
+        "tags": [
+          "connectors"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/overview": {
+      "get": {
+        "summary": "Admin overview",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/logs": {
+      "get": {
+        "summary": "Structured logs",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/audit": {
+      "get": {
+        "summary": "Audit trail",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/devices": {
+      "get": {
+        "summary": "Device states",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/provisioning-codes": {
+      "post": {
+        "summary": "Create provisioning code",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/telemetry": {
+      "get": {
+        "summary": "Telemetry overview",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/telemetry/enable-timescale": {
+      "post": {
+        "summary": "Enable Timescale",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/jobs": {
+      "get": {
+        "summary": "List worker jobs",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/quotas": {
+      "get": {
+        "summary": "List quota usage",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/contracts": {
+      "get": {
+        "summary": "Contract manifest",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/contracts/openapi.json": {
+      "get": {
+        "summary": "Generated OpenAPI document",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/admin/contracts/asyncapi.json": {
+      "get": {
+        "summary": "Generated AsyncAPI document",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/integrations/spotify/connect": {
+      "get": {
+        "summary": "Start Spotify OAuth",
+        "tags": [
+          "integrations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/integrations/spotify/callback": {
+      "get": {
+        "summary": "Handle Spotify OAuth callback",
+        "tags": [
+          "integrations"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/integrations/spotify/status": {
+      "get": {
+        "summary": "Get Spotify status",
+        "tags": [
+          "integrations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/integrations/spotify/presence": {
+      "post": {
+        "summary": "Refresh Spotify presence",
+        "tags": [
+          "integrations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1/integrations/spotify/disconnect": {
+      "post": {
+        "summary": "Disconnect Spotify",
+        "tags": [
+          "integrations"
+        ],
+        "security": [
+          {
+            "koriAuth": [
+              "admin"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "koriAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-kori-session"
+      }
+    },
+    "schemas": {
+      "AuthUser": {
+        "type": "object"
+      },
+      "Workspace": {
+        "type": "object"
+      },
+      "MfaFactor": {
+        "type": "object"
+      },
+      "Invitation": {
+        "type": "object"
+      },
+      "ServiceToken": {
+        "type": "object"
+      },
+      "DeviceConfig": {
+        "type": "object"
+      },
+      "Note": {
+        "type": "object"
+      },
+      "NoteRevision": {
+        "type": "object"
+      },
+      "Deadline": {
+        "type": "object"
+      },
+      "Recommendation": {
+        "type": "object"
+      },
+      "ConnectorConfig": {
+        "type": "object"
+      },
+      "ConnectorRun": {
+        "type": "object"
+      },
+      "JobStatus": {
+        "type": "object"
+      },
+      "QuotaUsage": {
+        "type": "object"
+      },
+      "TemporalEvent": {
+        "type": "object"
+      },
+      "TemporalSignal": {
+        "type": "object"
+      },
+      "DeveloperLogEvent": {
+        "type": "object"
+      },
+      "DeviceLiveState": {
+        "type": "object"
+      },
+      "SpotifyPresence": {
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "type": "object"
+      }
+    }
+  }
+}

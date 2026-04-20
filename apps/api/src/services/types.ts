@@ -2,17 +2,26 @@ import type {
   AuthSessionResponse,
   AuthUser as SharedAuthUser,
   AuditEvent,
+  ConnectorConfig,
+  ConnectorRun,
   Deadline,
   DeviceConfig,
   DeviceLiveState,
   DeveloperLogEvent,
+  Invitation,
+  JobStatus,
+  MfaFactor,
   Note,
   NoteRevision,
   NotificationSeverity,
+  QuotaUsage,
   Recommendation,
   SpotifyPresence,
   TelemetryBucket,
   TelemetryLatest,
+  TemporalEvent,
+  TemporalSignal,
+  ServiceToken,
   Workspace,
   WorkspaceRole
 } from "@kori/shared";
@@ -199,6 +208,7 @@ export interface SpotifyService {
 export interface AdminSession {
   role: Extract<WorkspaceRole, "platform_admin" | "workspace_admin">;
   actorId: string;
+  workspaceIds: string[];
 }
 
 export interface AdminStreamEvent {
@@ -222,8 +232,70 @@ export interface AuthService {
   logout(token: string): Promise<void>;
 }
 
+export interface SecurityService {
+  listMfaFactors(userId: string): Promise<MfaFactor[]>;
+  enrollTotp(input: {
+    userId: string;
+    email: string;
+    label?: string;
+  }): Promise<{ factor: MfaFactor; secret: string; otpauthUrl: string; backupCodes: string[] }>;
+  verifyMfaFactor(input: { userId: string; factorId: string; code: string }): Promise<boolean>;
+  disableMfaFactor(input: { userId: string; factorId: string }): Promise<boolean>;
+  listInvitations(input: { workspaceIds?: string[] }): Promise<Invitation[]>;
+  createInvitation(input: {
+    email: string;
+    workspaceId: string;
+    role: Extract<WorkspaceRole, "workspace_admin" | "member" | "service">;
+    expiresInSec: number;
+    invitedByUserId?: string | null;
+  }): Promise<{ invitation: Invitation; token: string }>;
+  acceptInvitation(input: { userId: string; userEmail: string; token: string }): Promise<Invitation | null>;
+  listServiceTokens(input: { workspaceIds?: string[] }): Promise<ServiceToken[]>;
+  createServiceToken(input: {
+    workspaceId?: string;
+    label: string;
+  }): Promise<{ serviceToken: ServiceToken; rawToken: string }>;
+  revokeServiceToken(id: string): Promise<boolean>;
+}
+
 export interface WorkspaceService {
   listForUser(userId: string): Promise<WorkspaceMembership[]>;
+}
+
+export interface ConnectorsService {
+  listConfigs(input: { workspaceIds?: string[] }): Promise<ConnectorConfig[]>;
+  upsertConfig(input: {
+    workspaceId: string;
+    provider: string;
+    config: Record<string, unknown>;
+  }): Promise<ConnectorConfig>;
+  listRuns(input: { workspaceIds?: string[]; limit?: number }): Promise<ConnectorRun[]>;
+  triggerRun(input: { workspaceId: string; provider: string; triggeredBy?: string | null }): Promise<ConnectorRun>;
+}
+
+export interface JobsService {
+  listJobs(limit?: number): Promise<JobStatus[]>;
+  enqueue(input: {
+    kind: string;
+    workspaceId?: string | null;
+    metadata: Record<string, unknown>;
+  }): Promise<JobStatus>;
+}
+
+export interface QuotasService {
+  listUsage(input?: { workspaceIds?: string[] }): Promise<QuotaUsage[]>;
+}
+
+export interface TemporalService {
+  listEvents(limit?: number): Promise<TemporalEvent[]>;
+  listSignals(limit?: number): Promise<TemporalSignal[]>;
+  recordEvent(input: {
+    type: string;
+    workspaceId?: string | null;
+    userId?: string | null;
+    deviceId?: string | null;
+    metadata: Record<string, unknown>;
+  }): Promise<TemporalEvent>;
 }
 
 export interface NotesService {

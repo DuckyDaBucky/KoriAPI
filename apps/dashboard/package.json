@@ -1,6 +1,24 @@
 {
   "name": "@kori/dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Zero-dependency developer dashboard scaffold for KoriAPI"
+  "description": "Next.js admin dashboard for KoriAPI",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "swr": "^2.3.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.8.3"
+  }
 }
