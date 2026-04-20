@@ -23,10 +23,12 @@ Platform control plane for Kori devices, live telemetry, admin observability, in
 - admin-only overview, logs, audit, and provisioning APIs
 - MFA enrollment/verification/disable flows
 - password reset request and reset flows
+- SMTP-backed password reset and invitation delivery with Mailpit-friendly defaults
 - invitations and service tokens
 - connector config and connector run APIs
 - admin device revoke, reprovision, config update, and mark-offline actions
 - admin jobs, quotas, and generated contract endpoints
+- saved dashboard views and audited admin test-console APIs
 - authenticated Next.js dashboard in `apps/dashboard`
 - Spotify ambient presence integration scaffolding
 - audit trail and observability event stream foundations
@@ -36,11 +38,12 @@ Platform control plane for Kori devices, live telemetry, admin observability, in
 Copy [apps/api/.env.example](/c:/Users/hasna/Documents/KoriAPI/apps/api/.env.example) to `apps/api/.env` or `.env` at the repo root and fill in the values.
 
 Important variables:
-- `ADMIN_API_KEY`: admin access for emergency `/v1/admin/*` operations
+- `ADMIN_API_KEY`: local-development-only emergency admin fallback
 - `APP_ENCRYPTION_KEY`: encryption key for protected integration secrets
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`: self-hosted SMTP delivery for password reset and invitation flows
 - `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`: Spotify presence integration
 - `SEED_USER_EMAIL`, `SEED_USER_PASSWORD`: local auth bootstrap account for login-backed dashboard access
-- `WORKER_POLL_INTERVAL_MS`: worker queue polling interval
+- `WORKER_POLL_INTERVAL_MS`, `WORKER_HEARTBEAT_INTERVAL_MS`, `WORKER_MAX_RETRIES`: worker polling, heartbeat, and retry policy
 
 ## Commands
 

@@ -6,6 +6,7 @@
   "/integrations/page": "app/integrations/page.js",
   "/jobs/page": "app/jobs/page.js",
   "/login/page": "app/login/page.js",
+  "/operations/page": "app/operations/page.js",
   "/page": "app/page.js",
   "/telemetry/page": "app/telemetry/page.js"
 }

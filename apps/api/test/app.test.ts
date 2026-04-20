@@ -62,11 +62,21 @@ test("bootstrap supports provisioning code flow", async () => {
     env: baseEnv
   });
 
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
   const codeResponse = await app.inject({
     method: "POST",
     url: "/v1/admin/provisioning-codes",
     headers: {
-      "x-kori-admin-key": baseEnv.ADMIN_API_KEY
+      "x-kori-session": sessionToken
     },
     payload: {
       workspaceId: "ws_dev",
@@ -117,7 +127,7 @@ test("bootstrap rejects invalid credentials", async () => {
   await app.close();
 });
 
-test("admin overview requires admin key", async () => {
+test("admin overview requires an admin session and rejects the legacy admin key outside development", async () => {
   const app = await buildServer({
     env: baseEnv
   });
@@ -136,8 +146,28 @@ test("admin overview requires admin key", async () => {
     }
   });
 
-  assert.equal(authorized.statusCode, 200);
-  assert.equal(authorized.json().counts.devices, 0);
+  assert.equal(authorized.statusCode, 401);
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    payload: {
+      email: "owner@example.com",
+      password: "ChangeMe123!"
+    }
+  });
+  const sessionToken = login.json().sessionToken as string;
+
+  const sessionAuthorized = await app.inject({
+    method: "GET",
+    url: "/v1/admin/overview",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+
+  assert.equal(sessionAuthorized.statusCode, 200);
+  assert.equal(sessionAuthorized.json().counts.devices, 0);
 
   await app.close();
 });
@@ -516,6 +546,15 @@ test("security, connector, job, quota, and generated contract routes work", asyn
   assert.equal(acceptInvitation.statusCode, 200);
   assert.equal(acceptInvitation.json().status, "accepted");
 
+  const revokedInvitation = await app.inject({
+    method: "DELETE",
+    url: `/v1/auth/invitations/${invitation.json().invitation.id}`,
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(revokedInvitation.statusCode, 200);
+
   const serviceToken = await app.inject({
     method: "POST",
     url: "/v1/service-tokens",
@@ -607,6 +646,46 @@ test("security, connector, job, quota, and generated contract routes work", asyn
     }
   });
   assert.equal(logs.statusCode, 200);
+
+  const savedView = await app.inject({
+    method: "POST",
+    url: "/v1/admin/dashboard-views",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      workspaceId: "ws_dev",
+      name: "Ops view",
+      filters: {
+        route: "/v1/admin/jobs"
+      }
+    }
+  });
+  assert.equal(savedView.statusCode, 201);
+
+  const savedViews = await app.inject({
+    method: "GET",
+    url: "/v1/admin/dashboard-views",
+    headers: {
+      "x-kori-session": sessionToken
+    }
+  });
+  assert.equal(savedViews.statusCode, 200);
+  assert.equal(savedViews.json().length, 1);
+
+  const consoleRun = await app.inject({
+    method: "POST",
+    url: "/v1/admin/test-console",
+    headers: {
+      "x-kori-session": sessionToken
+    },
+    payload: {
+      method: "GET",
+      path: "/v1/admin/overview"
+    }
+  });
+  assert.equal(consoleRun.statusCode, 200);
+  assert.equal(consoleRun.json().ok, true);
 
   await app.close();
 });

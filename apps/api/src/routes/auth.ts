@@ -226,7 +226,46 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       }
     });
 
+    await app.services.mailService.sendInvitation({
+      email: body.email,
+      workspaceId: body.workspaceId,
+      role: body.role,
+      token: invitation.token,
+      expiresAt: invitation.invitation.expiresAt
+    });
+
     return reply.code(201).send(invitationCreateResponseSchema.parse(invitation));
+  });
+
+  app.delete("/v1/auth/invitations/:id", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const invitationId = (request.params as { id: string }).id;
+    const revoked = await app.services.securityService.revokeInvitation(invitationId);
+    if (!revoked) {
+      return reply.code(404).send({
+        error: {
+          code: "INVITATION_NOT_FOUND",
+          message: "Invitation was not found"
+        }
+      });
+    }
+
+    await app.services.auditService.record({
+      action: "auth.invitation.revoke",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "invitation",
+      resourceId: invitationId,
+      metadata: {}
+    });
+
+    return { ok: true };
   });
 
   app.post("/v1/auth/invitations/:id/accept", async (request, reply) => {
@@ -305,6 +344,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       expiresInSec: 60 * 60
     });
 
+    if (result.resetToken && result.expiresAt) {
+      await app.services.mailService.sendPasswordReset({
+        email: body.email,
+        resetToken: result.resetToken,
+        expiresAt: result.expiresAt
+      });
+    }
+
     await app.services.auditService.record({
       action: "auth.password.forgot",
       actorType: "system",
@@ -320,12 +367,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return passwordResetForgotResponseSchema.parse(
-      app.config.NODE_ENV === "production"
-        ? { ok: true }
-        : {
+      result.resetToken && result.expiresAt && app.config.NODE_ENV !== "production"
+        ? {
             ok: true,
-            ...(result.resetToken ? { resetToken: result.resetToken } : {}),
-            ...(result.expiresAt ? { expiresAt: result.expiresAt } : {})
+            resetToken: result.resetToken,
+            expiresAt: result.expiresAt
+          }
+        : {
+            ok: true
           }
     );
   });

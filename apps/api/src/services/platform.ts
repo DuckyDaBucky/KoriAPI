@@ -3,6 +3,7 @@ import { createDbClient, schema } from "@kori/db";
 import type {
   ConnectorConfig,
   ConnectorRun,
+  DashboardView,
   Invitation,
   JobStatus,
   MfaFactor,
@@ -25,6 +26,7 @@ import {
 } from "../utils/crypto.js";
 import type {
   ConnectorsService,
+  DashboardViewsService,
   JobsService,
   QuotasService,
   SecurityService,
@@ -229,6 +231,15 @@ export class MemorySecurityService implements SecurityService {
     return publicInvitation;
   }
 
+  async revokeInvitation(id: string): Promise<boolean> {
+    const invitation = this.invitations.find((entry) => entry.id === id);
+    if (!invitation) {
+      return false;
+    }
+    invitation.status = "revoked";
+    return true;
+  }
+
   async listServiceTokens(input: { workspaceIds?: string[] }): Promise<ServiceToken[]> {
     return this.serviceTokens.filter(
       (token) => !input.workspaceIds || !token.workspaceId || input.workspaceIds.includes(token.workspaceId)
@@ -347,6 +358,70 @@ export class MemoryQuotasService implements QuotasService {
         monthlyAiTokensUsed: 0
       }
     ];
+  }
+}
+
+export class MemoryDashboardViewsService implements DashboardViewsService {
+  private readonly views: DashboardView[] = [];
+
+  async listViews(input: { workspaceIds?: string[]; userId?: string | null }): Promise<DashboardView[]> {
+    return this.views.filter((view) => {
+      if (input.workspaceIds && !input.workspaceIds.includes(view.workspaceId)) {
+        return false;
+      }
+      if (input.userId && view.userId && view.userId !== input.userId) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  async saveView(input: {
+    workspaceId: string;
+    userId?: string | null;
+    name: string;
+    filters: Record<string, unknown>;
+  }): Promise<DashboardView> {
+    const existing = this.views.find(
+      (view) => view.workspaceId === input.workspaceId && view.userId === (input.userId ?? null) && view.name === input.name
+    );
+    const now = new Date().toISOString();
+    if (existing) {
+      existing.filters = redactSensitive(input.filters);
+      existing.updatedAt = now;
+      return existing;
+    }
+
+    const created: DashboardView = {
+      id: createId("dview"),
+      name: input.name,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      filters: redactSensitive(input.filters),
+      createdAt: now,
+      updatedAt: now
+    };
+    this.views.unshift(created);
+    return created;
+  }
+
+  async deleteView(input: { id: string; workspaceIds?: string[]; userId?: string | null }): Promise<boolean> {
+    const index = this.views.findIndex((view) => view.id === input.id);
+    if (index === -1) {
+      return false;
+    }
+    const view = this.views[index];
+    if (!view) {
+      return false;
+    }
+    if (input.workspaceIds && !input.workspaceIds.includes(view.workspaceId)) {
+      return false;
+    }
+    if (input.userId && view.userId && view.userId !== input.userId) {
+      return false;
+    }
+    this.views.splice(index, 1);
+    return true;
   }
 }
 
@@ -653,6 +728,23 @@ export class DrizzleSecurityService implements SecurityService {
     };
   }
 
+  async revokeInvitation(id: string): Promise<boolean> {
+    const db = createDbClient();
+    const invitation = await db.query.invitations.findFirst({
+      where: eq(schema.invitations.id, id)
+    });
+    if (!invitation) {
+      return false;
+    }
+    await db
+      .update(schema.invitations)
+      .set({
+        status: "revoked"
+      })
+      .where(eq(schema.invitations.id, id));
+    return true;
+  }
+
   async listServiceTokens(input: { workspaceIds?: string[] }): Promise<ServiceToken[]> {
     const db = createDbClient();
     const rows = await db.query.serviceTokens.findMany({
@@ -874,6 +966,101 @@ export class DrizzleQuotasService implements QuotasService {
     );
 
     return usages;
+  }
+}
+
+export class DrizzleDashboardViewsService implements DashboardViewsService {
+  async listViews(input: { workspaceIds?: string[]; userId?: string | null }): Promise<DashboardView[]> {
+    const db = createDbClient();
+    const rows = await db.query.dashboardViews.findMany({
+      where: input.workspaceIds ? inArray(schema.dashboardViews.workspaceId, input.workspaceIds) : undefined,
+      orderBy: desc(schema.dashboardViews.updatedAt)
+    });
+    return rows
+      .filter((row: (typeof rows)[number]) => !input.userId || row.userId === null || row.userId === input.userId)
+      .map((row: (typeof rows)[number]) => ({
+        id: row.id,
+        name: row.name,
+        workspaceId: row.workspaceId,
+        userId: row.userId ?? null,
+        filters: redactSensitive(row.filters),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString()
+      }));
+  }
+
+  async saveView(input: {
+    workspaceId: string;
+    userId?: string | null;
+    name: string;
+    filters: Record<string, unknown>;
+  }): Promise<DashboardView> {
+    const db = createDbClient();
+    const existing = await db.query.dashboardViews.findFirst({
+      where: and(
+        eq(schema.dashboardViews.workspaceId, input.workspaceId),
+        eq(schema.dashboardViews.name, input.name),
+        input.userId ? eq(schema.dashboardViews.userId, input.userId) : isNull(schema.dashboardViews.userId)
+      )
+    });
+    const now = new Date();
+    const safeFilters = redactSensitive(input.filters);
+    if (existing) {
+      await db
+        .update(schema.dashboardViews)
+        .set({
+          filters: safeFilters,
+          updatedAt: now
+        })
+        .where(eq(schema.dashboardViews.id, existing.id));
+      return {
+        id: existing.id,
+        name: existing.name,
+        workspaceId: existing.workspaceId,
+        userId: existing.userId ?? null,
+        filters: safeFilters,
+        createdAt: existing.createdAt.toISOString(),
+        updatedAt: now.toISOString()
+      };
+    }
+
+    const id = createId("dview");
+    await db.insert(schema.dashboardViews).values({
+      id,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      name: input.name,
+      filters: safeFilters,
+      createdAt: now,
+      updatedAt: now
+    });
+    return {
+      id,
+      name: input.name,
+      workspaceId: input.workspaceId,
+      userId: input.userId ?? null,
+      filters: safeFilters,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+  }
+
+  async deleteView(input: { id: string; workspaceIds?: string[]; userId?: string | null }): Promise<boolean> {
+    const db = createDbClient();
+    const existing = await db.query.dashboardViews.findFirst({
+      where: eq(schema.dashboardViews.id, input.id)
+    });
+    if (!existing) {
+      return false;
+    }
+    if (input.workspaceIds && !input.workspaceIds.includes(existing.workspaceId)) {
+      return false;
+    }
+    if (input.userId && existing.userId && existing.userId !== input.userId) {
+      return false;
+    }
+    await db.delete(schema.dashboardViews).where(eq(schema.dashboardViews.id, input.id));
+    return true;
   }
 }
 

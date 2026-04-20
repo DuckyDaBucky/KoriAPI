@@ -14,6 +14,7 @@ const navItems = [
   { href: "/" as Route, label: "Overview" },
   { href: "/devices" as Route, label: "Devices" },
   { href: "/telemetry" as Route, label: "Telemetry" },
+  { href: "/operations" as Route, label: "Operations" },
   { href: "/jobs" as Route, label: "Jobs" },
   { href: "/integrations" as Route, label: "Integrations" },
   { href: "/contracts" as Route, label: "Contracts" }

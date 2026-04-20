@@ -8,9 +8,11 @@ import type {
   DeadlinesService,
   DeviceAuthService,
   DeviceRegistryService,
+  DashboardViewsService,
   HealthService,
   JobsService,
   LiveStateService,
+  MailService,
   NotesService,
   NotificationEventService,
   ObservabilityService,
@@ -35,6 +37,7 @@ export interface AppServices {
   provisioningCodeService: ProvisioningCodeService;
   healthService: HealthService;
   liveStateService: LiveStateService;
+  mailService: MailService;
   notesService: NotesService;
   sensorIngestionService: SensorIngestionService;
   notificationEventService: NotificationEventService;
@@ -48,15 +51,12 @@ export interface AppServices {
   spotifyService: SpotifyService;
   telemetryService: TelemetryService;
   temporalService: TemporalService;
+  dashboardViewsService: DashboardViewsService;
 }
 
 declare module "fastify" {
   interface FastifyInstance {
     services: AppServices;
-    betterAuthStub: {
-      enabled: boolean;
-      baseUrl?: string | undefined;
-    };
   }
 }
 

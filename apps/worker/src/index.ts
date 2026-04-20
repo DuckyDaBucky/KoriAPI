@@ -8,6 +8,8 @@ loadDotEnv({ path: "apps/api/.env", override: false });
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5000);
 const appEncryptionKey = process.env.APP_ENCRYPTION_KEY ?? "kori-development-encryption-key";
+const maxJobRetries = Number(process.env.WORKER_MAX_RETRIES ?? 3);
+const heartbeatIntervalMs = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 5000);
 
 const db = createDbClient();
 
@@ -64,6 +66,44 @@ async function markJobComplete(job: WorkerJob, status: "succeeded" | "failed", m
       }
     })
     .where(eq(schema.workerJobs.id, job.id));
+}
+
+async function recordAudit(input: {
+  action: string;
+  resourceId: string | null;
+  metadata: Record<string, unknown>;
+  workspaceId?: string | null;
+}): Promise<void> {
+  await db.insert(schema.auditLogs).values({
+    id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    action: input.action,
+    actorType: "system",
+    actorId: "worker",
+    resourceType: "worker_job",
+    resourceId: input.resourceId,
+    workspaceId: input.workspaceId ?? null,
+    userId: null,
+    metadata: input.metadata
+  });
+}
+
+function getRetryCount(job: WorkerJob): number {
+  return typeof job.metadata?.retryCount === "number" ? job.metadata.retryCount : 0;
+}
+
+async function updateJobMetadata(jobId: string, metadata: Record<string, unknown>): Promise<void> {
+  const existing = await db.query.workerJobs.findFirst({
+    where: eq(schema.workerJobs.id, jobId)
+  });
+  await db
+    .update(schema.workerJobs)
+    .set({
+      metadata: {
+        ...(existing?.metadata ?? {}),
+        ...metadata
+      }
+    })
+    .where(eq(schema.workerJobs.id, jobId));
 }
 
 async function handleConnectorJob(job: WorkerJob, provider: string): Promise<Record<string, unknown>> {
@@ -330,14 +370,75 @@ async function processOneJob(): Promise<boolean> {
     return false;
   }
 
+  await recordAudit({
+    action: "worker.job.started",
+    resourceId: job.id,
+    workspaceId: job.workspaceId ?? null,
+    metadata: {
+      kind: job.kind
+    }
+  });
+
+  const heartbeat = setInterval(() => {
+    void updateJobMetadata(job.id, {
+      lastHeartbeatAt: new Date().toISOString()
+    });
+  }, heartbeatIntervalMs);
+
   try {
     const metadata = await executeJob(job);
+    clearInterval(heartbeat);
     await markJobComplete(job, "succeeded", metadata);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown worker error";
-    await markJobComplete(job, "failed", {
-      error: message
+    await recordAudit({
+      action: "worker.job.succeeded",
+      resourceId: job.id,
+      workspaceId: job.workspaceId ?? null,
+      metadata
     });
+  } catch (error) {
+    clearInterval(heartbeat);
+    const message = error instanceof Error ? error.message : "Unknown worker error";
+    const retryCount = getRetryCount(job) + 1;
+    if (retryCount < maxJobRetries) {
+      await db
+        .update(schema.workerJobs)
+        .set({
+          status: "queued",
+          startedAt: null,
+          completedAt: null,
+          metadata: {
+            ...(job.metadata ?? {}),
+            retryCount,
+            lastError: message,
+            lastRetriedAt: new Date().toISOString()
+          }
+        })
+        .where(eq(schema.workerJobs.id, job.id));
+      await recordAudit({
+        action: "worker.job.requeued",
+        resourceId: job.id,
+        workspaceId: job.workspaceId ?? null,
+        metadata: {
+          retryCount,
+          error: message
+        }
+      });
+    } else {
+      await markJobComplete(job, "failed", {
+        ...(job.metadata ?? {}),
+        retryCount,
+        error: message
+      });
+      await recordAudit({
+        action: "worker.job.failed",
+        resourceId: job.id,
+        workspaceId: job.workspaceId ?? null,
+        metadata: {
+          retryCount,
+          error: message
+        }
+      });
+    }
   }
 
   return true;

@@ -72,6 +72,12 @@
       "namedRegex": "^/login(?:/)?$"
     },
     {
+      "page": "/operations",
+      "regex": "^/operations(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/operations(?:/)?$"
+    },
+    {
       "page": "/telemetry",
       "regex": "^/telemetry(?:/)?$",
       "routeKeys": {},

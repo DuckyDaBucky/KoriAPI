@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { TestConsole } from "@/components/test-console";
 import { fetchJson } from "@/lib/api";
 import { requireDashboardSession } from "@/lib/auth";
 
@@ -19,6 +20,7 @@ export default async function ContractsPage() {
       description="REST manifest plus generated OpenAPI and AsyncAPI documents exposed through the authenticated dashboard."
       session={session}
     >
+      <TestConsole sessionToken={sessionToken} />
       <div className="grid">
         <section className="panel mono stream">{JSON.stringify(manifest, null, 2)}</section>
         <section className="panel mono stream">{JSON.stringify(openapi, null, 2)}</section>

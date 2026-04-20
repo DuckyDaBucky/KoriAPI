@@ -6,6 +6,7 @@
   "/integrations/page": "/integrations",
   "/jobs/page": "/jobs",
   "/login/page": "/login",
+  "/operations/page": "/operations",
   "/page": "/",
   "/telemetry/page": "/telemetry"
 }

@@ -38,6 +38,7 @@ declare namespace __next_route_internal_types__ {
     | `/integrations`
     | `/jobs`
     | `/login`
+    | `/operations`
     | `/telemetry`
   type DynamicRoutes<T extends string = string> = never
 

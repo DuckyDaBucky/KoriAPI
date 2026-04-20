@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { spotifyConnectionStatusSchema, spotifyPresenceSchema } from "@kori/shared";
 import { decodeSpotifyState } from "../services/spotify.js";
-import { requireAdminSession } from "../utils/admin-auth.js";
+import { requireUserSession } from "../utils/admin-auth.js";
 
 function getUserIdFromRequest(request: {
   query?: Record<string, unknown> | undefined;
@@ -18,17 +18,18 @@ function getUserIdFromRequest(request: {
 
 const spotifyRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/integrations/spotify/connect", async (request, reply) => {
-    const adminSession = await requireAdminSession(request, reply);
-    if (!adminSession) {
+    const session = await requireUserSession(request, reply);
+    if (!session) {
       return;
     }
 
-    const userId = getUserIdFromRequest({ query: request.query as Record<string, unknown> | undefined });
-    if (!userId) {
-      return reply.code(400).send({
+    const userId = getUserIdFromRequest({ query: request.query as Record<string, unknown> | undefined }) ?? session.user.id;
+    const hasAdminRole = session.user.roles.some((role) => role === "platform_admin" || role === "workspace_admin");
+    if (userId !== session.user.id && !hasAdminRole) {
+      return reply.code(403).send({
         error: {
-          code: "MISSING_USER_ID",
-          message: "userId is required"
+          code: "FORBIDDEN_SPOTIFY_ACCESS",
+          message: "You can only connect Spotify for your own session"
         }
       });
     }
@@ -80,17 +81,18 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/v1/integrations/spotify/status", async (request, reply) => {
-    const adminSession = await requireAdminSession(request, reply);
-    if (!adminSession) {
+    const session = await requireUserSession(request, reply);
+    if (!session) {
       return;
     }
 
-    const userId = getUserIdFromRequest({ query: request.query as Record<string, unknown> | undefined });
-    if (!userId) {
-      return reply.code(400).send({
+    const userId = getUserIdFromRequest({ query: request.query as Record<string, unknown> | undefined }) ?? session.user.id;
+    const hasAdminRole = session.user.roles.some((role) => role === "platform_admin" || role === "workspace_admin");
+    if (userId !== session.user.id && !hasAdminRole) {
+      return reply.code(403).send({
         error: {
-          code: "MISSING_USER_ID",
-          message: "userId is required"
+          code: "FORBIDDEN_SPOTIFY_ACCESS",
+          message: "You can only view Spotify status for your own session"
         }
       });
     }
@@ -99,20 +101,22 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/v1/integrations/spotify/presence", async (request, reply) => {
-    const adminSession = await requireAdminSession(request, reply);
-    if (!adminSession) {
+    const session = await requireUserSession(request, reply);
+    if (!session) {
       return;
     }
 
-    const userId = getUserIdFromRequest({
+    const userId =
+      getUserIdFromRequest({
       query: request.query as Record<string, unknown> | undefined,
       body: request.body as Record<string, unknown> | undefined
-    });
-    if (!userId) {
-      return reply.code(400).send({
+      }) ?? session.user.id;
+    const hasAdminRole = session.user.roles.some((role) => role === "platform_admin" || role === "workspace_admin");
+    if (userId !== session.user.id && !hasAdminRole) {
+      return reply.code(403).send({
         error: {
-          code: "MISSING_USER_ID",
-          message: "userId is required"
+          code: "FORBIDDEN_SPOTIFY_ACCESS",
+          message: "You can only refresh Spotify presence for your own session"
         }
       });
     }
@@ -126,20 +130,22 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/v1/integrations/spotify/disconnect", async (request, reply) => {
-    const adminSession = await requireAdminSession(request, reply);
-    if (!adminSession) {
+    const session = await requireUserSession(request, reply);
+    if (!session) {
       return;
     }
 
-    const userId = getUserIdFromRequest({
+    const userId =
+      getUserIdFromRequest({
       query: request.query as Record<string, unknown> | undefined,
       body: request.body as Record<string, unknown> | undefined
-    });
-    if (!userId) {
-      return reply.code(400).send({
+      }) ?? session.user.id;
+    const hasAdminRole = session.user.roles.some((role) => role === "platform_admin" || role === "workspace_admin");
+    if (userId !== session.user.id && !hasAdminRole) {
+      return reply.code(403).send({
         error: {
-          code: "MISSING_USER_ID",
-          message: "userId is required"
+          code: "FORBIDDEN_SPOTIFY_ACCESS",
+          message: "You can only disconnect Spotify for your own session"
         }
       });
     }
@@ -147,8 +153,8 @@ const spotifyRoutes: FastifyPluginAsync = async (app) => {
     await app.services.spotifyService.disconnect(userId);
     await app.services.auditService.record({
       action: "spotify.disconnected",
-      actorType: "admin",
-      actorId: adminSession.actorId,
+      actorType: "user",
+      actorId: session.user.id,
       workspaceId: null,
       userId,
       resourceType: "spotify_connection",

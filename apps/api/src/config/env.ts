@@ -25,6 +25,15 @@ const envSchema = z.object({
   BETTER_AUTH_BASE_URL: z.string().url().optional(),
   APP_ENCRYPTION_KEY: z.string().min(16).default("kori-development-encryption-key"),
   ADMIN_API_KEY: z.string().min(16).default("kori-development-admin-key"),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  SMTP_SECURE: z
+    .union([z.literal("true"), z.literal("false")])
+    .default("false")
+    .transform((value) => value === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().email().optional(),
   SPOTIFY_CLIENT_ID: z.string().optional(),
   SPOTIFY_CLIENT_SECRET: z.string().optional(),
   SPOTIFY_REDIRECT_URI: z.string().url().optional(),

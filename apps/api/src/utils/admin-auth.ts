@@ -92,7 +92,7 @@ export function clearSessionCookies(reply: FastifyReply): void {
 }
 
 export function isAdminAuthorized(token: string | null, env: AppEnv): boolean {
-  return token !== null && safeTokenCompare(token, env.ADMIN_API_KEY);
+  return env.NODE_ENV === "development" && token !== null && safeTokenCompare(token, env.ADMIN_API_KEY);
 }
 
 export function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
@@ -116,6 +116,20 @@ export async function requireAdminSession(
 ): Promise<AdminSession | null> {
   const token = extractAdminToken(request);
   if (isAdminAuthorized(token, request.server.config)) {
+    await request.server.services.auditService.record({
+      action: "admin_api_key.used",
+      actorType: "admin",
+      actorId: "admin_api_key",
+      workspaceId: null,
+      userId: null,
+      resourceType: "admin_api_key",
+      resourceId: null,
+      metadata: {
+        route: request.routeOptions.url ?? request.url,
+        method: request.method,
+        environment: request.server.config.NODE_ENV
+      }
+    });
     return {
       role: "platform_admin",
       actorId: "admin_api_key",

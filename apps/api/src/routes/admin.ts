@@ -1,8 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
+  adminTestRequestSchema,
+  adminTestResponseSchema,
   adminContractsSchema,
   adminOverviewSchema,
   contractDocumentSchema,
+  dashboardViewSchema,
+  dashboardViewUpsertRequestSchema,
   deviceAdminActionRequestSchema,
   deviceAdminActionResponseSchema,
   deviceLiveStateSchema,
@@ -13,8 +17,25 @@ import {
   quotaUsageSchema,
   telemetryOverviewSchema
 } from "@kori/shared";
-import { requireAdminSession } from "../utils/admin-auth.js";
+import { extractAdminToken, extractSessionToken, requireAdminSession } from "../utils/admin-auth.js";
 import { buildAsyncApiDocument, buildContractsManifest, buildOpenApiDocument } from "../contracts.js";
+
+const safeAdminTestPaths = new Set([
+  "/health",
+  "/v1/admin/overview",
+  "/v1/admin/logs",
+  "/v1/admin/audit",
+  "/v1/admin/devices",
+  "/v1/admin/jobs",
+  "/v1/admin/quotas",
+  "/v1/admin/contracts",
+  "/v1/admin/contracts/openapi.json",
+  "/v1/admin/contracts/asyncapi.json",
+  "/v1/admin/telemetry",
+  "/v1/connectors/configs",
+  "/v1/connectors/runs",
+  "/v1/service-tokens"
+]);
 
 const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/v1/admin/overview", async (request, reply) => {
@@ -385,6 +406,165 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       adminSession.role === "workspace_admin" ? { workspaceIds: adminSession.workspaceIds } : {}
     );
     return usage.map((entry) => quotaUsageSchema.parse(entry));
+  });
+
+  app.get("/v1/admin/dashboard-views", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const query = request.query as { workspaceId?: string } | undefined;
+    const workspaceIds =
+      adminSession.role === "workspace_admin"
+        ? adminSession.workspaceIds
+        : query?.workspaceId
+          ? [query.workspaceId]
+          : undefined;
+    const sessionToken = extractSessionToken(request);
+    const session = sessionToken ? await app.services.authService.getSession(sessionToken) : null;
+    const views = await app.services.dashboardViewsService.listViews({
+      ...(workspaceIds ? { workspaceIds } : {}),
+      userId: session?.user.id ?? null
+    });
+    return views.map((view) => dashboardViewSchema.parse(view));
+  });
+
+  app.post("/v1/admin/dashboard-views", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const sessionToken = extractSessionToken(request);
+    const session = sessionToken ? await app.services.authService.getSession(sessionToken) : null;
+    const body = dashboardViewUpsertRequestSchema.parse(request.body);
+    if (adminSession.role === "workspace_admin" && !adminSession.workspaceIds.includes(body.workspaceId)) {
+      return reply.code(403).send({
+        error: {
+          code: "FORBIDDEN_WORKSPACE",
+          message: "Admin does not have access to that workspace"
+        }
+      });
+    }
+
+    const view = await app.services.dashboardViewsService.saveView({
+      workspaceId: body.workspaceId,
+      userId: session?.user.id ?? null,
+      name: body.name,
+      filters: body.filters
+    });
+    await app.services.auditService.record({
+      action: "dashboard.view.save",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: body.workspaceId,
+      userId: session?.user.id ?? null,
+      resourceType: "dashboard_view",
+      resourceId: view.id,
+      metadata: {
+        name: body.name
+      }
+    });
+    return reply.code(201).send(dashboardViewSchema.parse(view));
+  });
+
+  app.delete("/v1/admin/dashboard-views/:id", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const sessionToken = extractSessionToken(request);
+    const session = sessionToken ? await app.services.authService.getSession(sessionToken) : null;
+    const id = (request.params as { id: string }).id;
+    const deleted = await app.services.dashboardViewsService.deleteView({
+      id,
+      ...(adminSession.role === "workspace_admin" ? { workspaceIds: adminSession.workspaceIds } : {}),
+      userId: session?.user.id ?? null
+    });
+    if (!deleted) {
+      return reply.code(404).send({
+        error: {
+          code: "DASHBOARD_VIEW_NOT_FOUND",
+          message: "Dashboard view was not found"
+        }
+      });
+    }
+
+    await app.services.auditService.record({
+      action: "dashboard.view.delete",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: session?.user.id ?? null,
+      resourceType: "dashboard_view",
+      resourceId: id,
+      metadata: {}
+    });
+    return { ok: true };
+  });
+
+  app.post("/v1/admin/test-console", async (request, reply) => {
+    const adminSession = await requireAdminSession(request, reply);
+    if (!adminSession) {
+      return;
+    }
+
+    const body = adminTestRequestSchema.parse(request.body);
+    if (!safeAdminTestPaths.has(body.path)) {
+      return reply.code(400).send({
+        error: {
+          code: "TEST_CONSOLE_PATH_FORBIDDEN",
+          message: "The requested path is not allowed in the admin test console"
+        }
+      });
+    }
+
+    const headers: Record<string, string> = {};
+    const sessionToken = extractSessionToken(request);
+    const adminToken = extractAdminToken(request);
+    if (sessionToken) {
+      headers["x-kori-session"] = sessionToken;
+    } else if (adminToken) {
+      headers["x-kori-admin-key"] = adminToken;
+    }
+
+    const internal = await app.inject({
+      method: body.method,
+      url: body.path,
+      headers
+    });
+
+    let responseBody: unknown;
+    try {
+      responseBody = internal.json();
+    } catch {
+      responseBody = internal.body;
+    }
+
+    await app.services.auditService.record({
+      action: "admin.test_console.run",
+      actorType: "admin",
+      actorId: adminSession.actorId,
+      workspaceId: null,
+      userId: null,
+      resourceType: "admin_test_console",
+      resourceId: null,
+      metadata: {
+        method: body.method,
+        path: body.path,
+        statusCode: internal.statusCode
+      }
+    });
+
+    return adminTestResponseSchema.parse({
+      ok: internal.statusCode < 400,
+      method: body.method,
+      path: body.path,
+      statusCode: internal.statusCode,
+      body: responseBody
+    });
   });
 };
 

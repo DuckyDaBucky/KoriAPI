@@ -16,6 +16,7 @@ export async function loginDashboard(
 ): Promise<{ error?: string } | undefined> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const invitationToken = String(formData.get("invitationToken") ?? "").trim();
 
   if (!email || !password) {
     return {
@@ -42,9 +43,62 @@ export async function loginDashboard(
         expires
       });
     }
+
+    if (invitationToken) {
+      await fetchJson("/v1/auth/invitations/pending/accept", {
+        method: "POST",
+        headers: {
+          "x-kori-session": session.sessionToken
+        },
+        body: JSON.stringify({
+          token: invitationToken
+        })
+      });
+    }
   } catch {
     return {
       error: "Invalid login."
+    };
+  }
+
+  redirect("/");
+}
+
+export async function completePasswordReset(
+  _previousState: { error?: string } | undefined,
+  formData: FormData
+): Promise<{ error?: string } | undefined> {
+  const token = String(formData.get("token") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!token || !password) {
+    return {
+      error: "Reset token and a new password are required."
+    };
+  }
+
+  try {
+    const session = await fetchJson<AuthSessionResponse>("/v1/auth/password/reset", {
+      method: "POST",
+      body: JSON.stringify({
+        token,
+        password
+      })
+    });
+    const cookieStore = await cookies();
+    const expires = new Date(session.expiresAt);
+    for (const cookieName of [dashboardSessionCookie, legacyDashboardSessionCookie]) {
+      cookieStore.set(cookieName, session.sessionToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        expires
+      });
+    }
+  } catch {
+    return {
+      error: "Password reset failed."
     };
   }
 

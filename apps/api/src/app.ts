@@ -45,11 +45,13 @@ import {
 } from "./services/drizzle.js";
 import {
   DrizzleConnectorsService,
+  DrizzleDashboardViewsService,
   DrizzleJobsService,
   DrizzleQuotasService,
   DrizzleSecurityService,
   DrizzleTemporalService,
   MemoryConnectorsService,
+  MemoryDashboardViewsService,
   MemoryJobsService,
   MemoryQuotasService,
   MemorySecurityService,
@@ -57,6 +59,7 @@ import {
 } from "./services/platform.js";
 import type { RedisClient } from "./services/types.js";
 import { SpotifyHttpService } from "./services/spotify.js";
+import { MemoryMailService, SmtpMailService } from "./services/mail.js";
 
 const RedisConstructor = (await import("ioredis")).default as unknown as new (
   url: string,
@@ -93,6 +96,7 @@ export function createDefaultServices(env: AppEnv): AppServices {
     healthService: new MemoryHealthService(),
     jobsService,
     liveStateService: new MemoryLiveStateService(),
+    mailService: new MemoryMailService(observabilityService),
     notesService: new MemoryNotesService(),
     sensorIngestionService,
     notificationEventService: new MemoryNotificationEventService(),
@@ -103,7 +107,8 @@ export function createDefaultServices(env: AppEnv): AppServices {
     securityService: new MemorySecurityService(),
     spotifyService: new MemorySpotifyService(),
     telemetryService: new MemoryTelemetryService(sensorIngestionService),
-    temporalService: new MemoryTemporalService()
+    temporalService: new MemoryTemporalService(),
+    dashboardViewsService: new MemoryDashboardViewsService()
   };
 }
 
@@ -134,6 +139,10 @@ export async function buildServer(options: BuildServerOptions = {}) {
     const deviceService = new DrizzleDeviceService(provisioningService);
     const authService = new DrizzleAuthService();
     const jobsService = new DrizzleJobsService();
+    const mailService =
+      env.SMTP_HOST && env.SMTP_FROM
+        ? new SmtpMailService(env, observabilityService)
+        : new MemoryMailService(observabilityService);
     baseServices = {
       authService,
       bootstrapService: deviceService,
@@ -146,6 +155,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
       healthService: new DrizzleHealthService(redis),
       jobsService,
       liveStateService: new RedisLiveStateService(redis),
+      mailService,
       notesService: new DrizzleNotesService(),
       sensorIngestionService: new DrizzleSensorIngestionService(),
       notificationEventService: new DrizzleNotificationEventService(),
@@ -156,7 +166,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
       securityService: new DrizzleSecurityService(env.APP_ENCRYPTION_KEY),
       spotifyService: new SpotifyHttpService(env, observabilityService),
       telemetryService: new DrizzleTelemetryService(),
-      temporalService: new DrizzleTemporalService()
+      temporalService: new DrizzleTemporalService(),
+      dashboardViewsService: new DrizzleDashboardViewsService()
     };
   }
 

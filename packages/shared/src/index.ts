@@ -139,6 +139,25 @@ export const invitationAcceptRequestSchema = z.object({
   token: z.string().min(8)
 });
 
+export const dashboardViewUpsertRequestSchema = z.object({
+  workspaceId: z.string().min(1),
+  name: z.string().min(1).max(120),
+  filters: z.record(z.string(), z.unknown()).default({})
+});
+
+export const adminTestRequestSchema = z.object({
+  method: z.enum(["GET"]).default("GET"),
+  path: z.string().min(1).max(240)
+});
+
+export const adminTestResponseSchema = z.object({
+  ok: z.boolean(),
+  method: z.enum(["GET"]),
+  path: z.string(),
+  statusCode: z.number().int(),
+  body: z.unknown()
+});
+
 export const serviceTokenSchema = z.object({
   id: z.string(),
   label: z.string(),

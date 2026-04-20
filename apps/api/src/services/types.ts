@@ -267,6 +267,7 @@ export interface SecurityService {
     invitedByUserId?: string | null;
   }): Promise<{ invitation: Invitation; token: string }>;
   acceptInvitation(input: { userId: string; userEmail: string; token: string }): Promise<Invitation | null>;
+  revokeInvitation(id: string): Promise<boolean>;
   listServiceTokens(input: { workspaceIds?: string[] }): Promise<ServiceToken[]>;
   createServiceToken(input: {
     workspaceId?: string;
@@ -395,4 +396,20 @@ export interface DashboardViewsService {
     name: string;
     filters: Record<string, unknown>;
   }): Promise<DashboardView>;
+  deleteView(input: { id: string; workspaceIds?: string[]; userId?: string | null }): Promise<boolean>;
+}
+
+export interface MailService {
+  sendPasswordReset(input: {
+    email: string;
+    resetToken: string;
+    expiresAt: string;
+  }): Promise<void>;
+  sendInvitation(input: {
+    email: string;
+    workspaceId: string;
+    role: Extract<WorkspaceRole, "workspace_admin" | "member" | "service">;
+    token: string;
+    expiresAt: string;
+  }): Promise<void>;
 }
